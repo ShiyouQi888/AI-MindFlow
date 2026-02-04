@@ -122,6 +122,7 @@ const MindmapCanvas: React.FC = () => {
   const [drawingId, setDrawingId] = React.useState<string | null>(null);
    const [startPos, setStartPos] = React.useState<Position | null>(null);
    const imageCache = useRef<Record<string, HTMLImageElement>>({});
+   const videoCache = useRef<Record<string, HTMLVideoElement>>({});
    
    const [inputDialog, setInputDialog] = useState<{
      isOpen: boolean;
@@ -145,6 +146,22 @@ const MindmapCanvas: React.FC = () => {
 
   const lastSubmittedElementId = useRef<string | null>(null);
   
+  // Video playback loop
+  useEffect(() => {
+    let animationId: number;
+    
+    const checkVideoPlayback = () => {
+      const anyVideoPlaying = Object.values(videoCache.current).some(v => !v.paused && !v.ended);
+      if (anyVideoPlaying) {
+        forceRender();
+      }
+      animationId = requestAnimationFrame(checkVideoPlayback);
+    };
+    
+    animationId = requestAnimationFrame(checkVideoPlayback);
+    return () => cancelAnimationFrame(animationId);
+  }, [forceRender]);
+
   // Get node at position
   const getNodeAtPosition = useCallback((clientX: number, clientY: number): MindNode | null => {
     const canvas = canvasRef.current;
@@ -220,6 +237,7 @@ const MindmapCanvas: React.FC = () => {
       case 'select': canvas.style.cursor = 'default'; break;
       case 'text': canvas.style.cursor = 'text'; break;
       case 'image': 
+      case 'video':
       case 'curve':
       case 'polyline':
       case 'rect':
@@ -241,7 +259,7 @@ const MindmapCanvas: React.FC = () => {
     const ctx = canvas.getContext('2d');
 
     for (const el of elementList) {
-      if (el.type === 'rect' || el.type === 'image') {
+      if (el.type === 'rect' || el.type === 'image' || el.type === 'video') {
         if (
           pos.x >= el.position.x &&
           pos.x <= el.position.x + (el.width || 0) &&
@@ -455,12 +473,25 @@ const MindmapCanvas: React.FC = () => {
     // Check for element selection
     if (elementId) {
       if (e.detail === 2) {
-        // Double click element - if it's text, edit it inline
+        // Double click element
         const el = elements[elementId];
-        if (el && el.type === 'text') {
-          console.log('Double clicked text element, opening inline editor', elementId);
-          setEditingElement(elementId);
-          return;
+        if (el) {
+          if (el.type === 'text') {
+            console.log('Double clicked text element, opening inline editor', elementId);
+            setEditingElement(elementId);
+            return;
+          } else if (el.type === 'video' && el.url) {
+            const video = videoCache.current[el.url];
+            if (video) {
+              if (video.paused) {
+                video.play().catch(console.error);
+              } else {
+                video.pause();
+              }
+              forceRender();
+              return;
+            }
+          }
         }
       } else {
         selectElement(elementId, e.shiftKey);
@@ -471,10 +502,10 @@ const MindmapCanvas: React.FC = () => {
 
     // If no node is clicked and we have a drawing tool active
     if (currentTool !== 'select') {
-      if (currentTool === 'image') {
-        // For images, don't draw a box. Just add and open dialog immediately.
+      if (currentTool === 'image' || currentTool === 'video') {
+        // For images and videos, don't draw a box. Just add and open dialog immediately.
         const newId = addElement({
-          type: 'image',
+          type: currentTool,
           position: pos,
           style: {
             stroke: colors.primary || 'hsl(220, 90%, 56%)',
@@ -487,7 +518,7 @@ const MindmapCanvas: React.FC = () => {
         setInputDialog({
           isOpen: true,
           elementId: newId,
-          type: 'image',
+          type: currentTool,
           defaultValue: '',
         });
         
@@ -704,7 +735,7 @@ const MindmapCanvas: React.FC = () => {
       // If it's a new text element and no text was entered, delete it
       if (element?.type === 'text' && (!element.text || element.text === '点击输入文字')) {
         deleteElement(inputDialog.elementId);
-      } else if (element?.type === 'image' && !element.url) {
+      } else if ((element?.type === 'image' || element?.type === 'video') && !element.url) {
         deleteElement(inputDialog.elementId);
       }
     }
@@ -1196,6 +1227,101 @@ const MindmapCanvas: React.FC = () => {
             ctx.fillStyle = el.style.stroke || colors.primary || '#3b82f6';
             ctx.font = '12px Inter';
             ctx.fillText('点击设置图片', drawX + 5, drawY + 15);
+          }
+          break;
+        }
+        case 'video': {
+          const storedWidth = el.width;
+          const storedHeight = el.height;
+          const vidWidth = storedWidth || 160;
+          const vidHeight = storedHeight || 90;
+          
+          const drawX = vidWidth < 0 ? el.position.x + vidWidth : el.position.x;
+          const drawY = vidHeight < 0 ? el.position.y + vidHeight : el.position.y;
+          const drawW = Math.abs(vidWidth);
+          const drawH = Math.abs(vidHeight);
+          
+          if (el.url) {
+            let video = videoCache.current[el.url];
+            if (!video) {
+              video = document.createElement('video');
+              video.src = el.url;
+              video.muted = true;
+              video.loop = true;
+              video.playsInline = true;
+              video.crossOrigin = 'anonymous';
+              
+              video.onloadeddata = () => {
+                videoCache.current[el.url!] = video;
+                if (!storedWidth || !storedHeight || Math.abs(storedWidth) < 2 || Math.abs(storedHeight) < 2) {
+                  const maxWidth = 400;
+                  const ratio = video.videoHeight / video.videoWidth;
+                  const width = Math.min(maxWidth, video.videoWidth);
+                  const height = width * ratio;
+                  updateElement(el.id, { width, height });
+                }
+                forceRender();
+              };
+              
+              video.onerror = () => {
+                ctx.strokeStyle = '#ef4444';
+                ctx.strokeRect(drawX, drawY, drawW, drawH);
+                ctx.fillStyle = '#ef4444';
+                ctx.fillText('视频加载失败', drawX + 5, drawY + 15);
+              };
+              
+              videoCache.current[el.url] = video;
+            }
+
+            if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+               ctx.drawImage(video, drawX, drawY, drawW, drawH);
+               
+               // Draw play/pause button overlay if not playing or if hovered
+               if (video.paused || isHovered || isSelected) {
+                 ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                 ctx.fillRect(drawX, drawY, drawW, drawH);
+                 
+                 const centerX = drawX + drawW / 2;
+                 const centerY = drawY + drawH / 2;
+                 const radius = Math.min(drawW, drawH) * 0.2;
+                 
+                 ctx.beginPath();
+                 ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                 ctx.fill();
+                 
+                 if (video.paused) {
+                   // Draw Play triangle
+                   ctx.beginPath();
+                   const triSize = radius * 0.5;
+                   ctx.moveTo(centerX - triSize * 0.4, centerY - triSize);
+                   ctx.lineTo(centerX + triSize * 0.8, centerY);
+                   ctx.lineTo(centerX - triSize * 0.4, centerY + triSize);
+                   ctx.closePath();
+                   ctx.fillStyle = '#000000';
+                   ctx.fill();
+                 } else {
+                   // Draw Pause bars
+                   const barW = radius * 0.2;
+                   const barH = radius * 0.8;
+                   ctx.fillStyle = '#000000';
+                   ctx.fillRect(centerX - barW * 1.5, centerY - barH / 2, barW, barH);
+                   ctx.fillRect(centerX + barW * 0.5, centerY - barH / 2, barW, barH);
+                 }
+               }
+             } else {
+              ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
+              ctx.strokeRect(drawX, drawY, drawW, drawH);
+              ctx.fillStyle = el.style.stroke || colors.primary || '#3b82f6';
+              ctx.font = '12px Inter';
+              ctx.fillText('正在加载视频...', drawX + 5, drawY + 15);
+            }
+          } else {
+            ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
+            ctx.strokeRect(drawX, drawY, drawW, drawH);
+            ctx.fillStyle = el.style.stroke || colors.primary || '#3b82f6';
+            ctx.font = '12px Inter';
+            ctx.fillText('点击设置视频', drawX + 5, drawY + 15);
           }
           break;
         }

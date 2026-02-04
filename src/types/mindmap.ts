@@ -162,7 +162,7 @@ export type LayoutType = 'tree' | 'radial' | 'free';
 
 export type ConnectionStyle = 'curve' | 'polyline' | 'straight';
 
-export type ToolType = 'select' | 'text' | 'image' | 'curve' | 'polyline' | 'rect' | 'circle';
+export type ToolType = 'select' | 'text' | 'image' | 'video' | 'curve' | 'polyline' | 'rect' | 'circle';
 
 export interface CanvasElement {
   id: string;

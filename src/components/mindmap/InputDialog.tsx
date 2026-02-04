@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Image as ImageIcon, Upload, Link as LinkIcon, Sparkles, BrainCircuit } from 'lucide-react';
+import { Image as ImageIcon, Video, Upload, Link as LinkIcon, Sparkles, BrainCircuit } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface InputDialogProps {
@@ -16,7 +16,7 @@ interface InputDialogProps {
   onClose: () => void;
   onSubmit: (value: string) => void;
   title: string;
-  type?: 'text' | 'image' | 'ai';
+  type?: 'text' | 'image' | 'video' | 'ai';
   defaultValue?: string;
   placeholder?: string;
 }
@@ -55,8 +55,13 @@ const InputDialog: React.FC<InputDialogProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
+    if (type === 'image' && !file.type.startsWith('image/')) {
       toast.error('请选择有效的图片文件');
+      return;
+    }
+    
+    if (type === 'video' && !file.type.startsWith('video/')) {
+      toast.error('请选择有效的视频文件');
       return;
     }
 
@@ -90,6 +95,10 @@ const InputDialog: React.FC<InputDialogProps> = ({
               <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
                 <ImageIcon className="w-5 h-5" />
               </div>
+            ) : type === 'video' ? (
+              <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
+                <Video className="w-5 h-5" />
+              </div>
             ) : null}
             <span className={isAI ? "bg-gradient-to-r from-violet-600 to-fuchsia-600 bg-clip-text text-transparent" : ""}>
               {title}
@@ -97,15 +106,15 @@ const InputDialog: React.FC<InputDialogProps> = ({
           </DialogTitle>
         </DialogHeader>
 
-        {type === 'image' ? (
+        {type === 'image' || type === 'video' ? (
           <div className="py-4">
             <Tabs defaultValue="upload" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-4">
                 <TabsTrigger value="upload" className="flex items-center gap-2">
-                  <Upload className="w-4 h-4" /> 上传图片
+                  <Upload className="w-4 h-4" /> 上传{type === 'image' ? '图片' : '视频'}
                 </TabsTrigger>
                 <TabsTrigger value="url" className="flex items-center gap-2">
-                  <LinkIcon className="w-4 h-4" /> 图片 URL
+                  <LinkIcon className="w-4 h-4" /> {type === 'image' ? '图片' : '视频'} URL
                 </TabsTrigger>
               </TabsList>
               
@@ -118,13 +127,15 @@ const InputDialog: React.FC<InputDialogProps> = ({
                     <Upload className="w-7 h-7 text-primary" />
                   </div>
                   <div className="text-center">
-                    <p className="text-base font-medium">点击或拖拽上传图片</p>
-                    <p className="text-xs text-muted-foreground mt-1">支持 JPG, PNG, GIF, SVG</p>
+                    <p className="text-base font-medium">点击或拖拽上传{type === 'image' ? '图片' : '视频'}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {type === 'image' ? '支持 JPG, PNG, GIF, SVG' : '支持 MP4, WebM, OGG'}
+                    </p>
                   </div>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept={type === 'image' ? "image/*" : "video/*"}
                     className="hidden"
                     onChange={handleFileChange}
                   />
@@ -138,7 +149,7 @@ const InputDialog: React.FC<InputDialogProps> = ({
                     autoFocus
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
-                    placeholder="请输入图片 URL (https://...)"
+                    placeholder={`请输入${type === 'image' ? '图片' : '视频'} URL (https://...)`}
                     className="w-full h-12 text-base"
                   />
                   <DialogFooter>

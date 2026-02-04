@@ -7,7 +7,8 @@ import {
   Activity, 
   Square, 
   Circle,
-  Pencil
+  Pencil,
+  Video
 } from 'lucide-react';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { ToolType } from '@/types/mindmap';
@@ -69,6 +70,7 @@ const LeftToolbar: React.FC = () => {
   const tools: { type: ToolType; icon: React.ReactNode; label: string }[] = [
     { type: 'text', icon: <Type className="w-5 h-5" />, label: '文字 (T)' },
     { type: 'image', icon: <ImageIcon className="w-5 h-5" />, label: '图片 (I)' },
+    { type: 'video', icon: <Video className="w-5 h-5" />, label: '视频 (V)' },
     { type: 'curve', icon: <Spline className="w-5 h-5" />, label: '曲线 (C)' },
     { type: 'polyline', icon: <Activity className="w-5 h-5" />, label: '折线 (P)' },
     { type: 'rect', icon: <Square className="w-5 h-5" />, label: '矩形 (R)' },

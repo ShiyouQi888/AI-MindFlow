@@ -741,7 +741,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       }
 
       // Handle shift key for proportional scaling
-      if (options?.shiftKey && (element.type === 'image' || element.type === 'rect' || element.type === 'circle')) {
+      if (options?.shiftKey && (element.type === 'image' || element.type === 'video' || element.type === 'rect' || element.type === 'circle')) {
         const aspectRatio = (element.type === 'circle') ? 1 : w / h;
         if (handle.length === 1) {
           // Single handle (n, s, e, w) - not typical for proportional but let's handle
