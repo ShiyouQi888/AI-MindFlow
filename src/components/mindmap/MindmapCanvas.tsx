@@ -50,6 +50,7 @@ const MindmapCanvas: React.FC = () => {
     setEditingElement,
     setCanvasSize,
     focusNode,
+    organizeMindmap,
   } = useMindmapStore();
   
   const { theme } = useTheme();
@@ -379,6 +380,14 @@ const MindmapCanvas: React.FC = () => {
 
     // If we clicked nothing and we're editing, close the editor
     if (!node && !elementId) {
+      if (e.detail === 2) {
+        // Double click on canvas - organize and center
+        if (containerRef.current) {
+          organizeMindmap(containerRef.current.clientWidth, containerRef.current.clientHeight);
+        }
+        return;
+      }
+
       if (editingNodeId || editingElementId) {
         setEditingNode(null);
         setEditingElement(null);

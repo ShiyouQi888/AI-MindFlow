@@ -1,5 +1,5 @@
-import React from 'react';
-import { Settings, Sparkles, Key, Globe, Cpu } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Settings, Sparkles, Key, Globe, Cpu, Save } from 'lucide-react';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import {
   Dialog,
@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,13 +17,29 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { toast } from 'sonner';
 
 const AISettings: React.FC = () => {
   const { aiConfig, setAIConfig } = useMindmapStore();
+  const [isOpen, setIsOpen] = useState(false);
+  const [localConfig, setLocalConfig] = useState(aiConfig);
+
+  // 当对话框打开时，同步全局配置到本地状态
+  useEffect(() => {
+    if (isOpen) {
+      setLocalConfig(aiConfig);
+    }
+  }, [isOpen, aiConfig]);
+
+  const handleSave = () => {
+    setAIConfig(localConfig);
+    setIsOpen(false);
+    toast.success('AI 配置已保存');
+  };
 
   return (
     <div className="absolute bottom-4 right-4 z-50">
-      <Dialog>
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <Tooltip>
           <TooltipTrigger asChild>
             <DialogTrigger asChild>
@@ -55,8 +72,8 @@ const AISettings: React.FC = () => {
                 id="apiKey"
                 type="password"
                 placeholder="sk-..."
-                value={aiConfig.apiKey}
-                onChange={(e) => setAIConfig({ apiKey: e.target.value })}
+                value={localConfig.apiKey}
+                onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
                 className="font-mono"
               />
               <p className="text-xs text-muted-foreground">
@@ -72,8 +89,8 @@ const AISettings: React.FC = () => {
               <Input
                 id="baseUrl"
                 placeholder="https://api.deepseek.com"
-                value={aiConfig.baseUrl}
-                onChange={(e) => setAIConfig({ baseUrl: e.target.value })}
+                value={localConfig.baseUrl}
+                onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value })}
               />
             </div>
 
@@ -85,8 +102,8 @@ const AISettings: React.FC = () => {
               <Input
                 id="model"
                 placeholder="deepseek-chat"
-                value={aiConfig.model}
-                onChange={(e) => setAIConfig({ model: e.target.value })}
+                value={localConfig.model}
+                onChange={(e) => setLocalConfig({ ...localConfig, model: e.target.value })}
               />
             </div>
 
@@ -97,6 +114,15 @@ const AISettings: React.FC = () => {
               </p>
             </div>
           </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setIsOpen(false)}>
+              取消
+            </Button>
+            <Button onClick={handleSave} className="gap-2">
+              <Save className="w-4 h-4" />
+              保存配置
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
