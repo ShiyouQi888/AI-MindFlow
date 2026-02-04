@@ -91,7 +91,7 @@ const MiniMap: React.FC = () => {
   }, [nodes, rootId, viewport]);
   
   return (
-    <div className="floating-panel absolute bottom-4 left-4 z-50 p-2">
+    <div className="floating-panel absolute bottom-12 left-4 z-50 p-2">
       <canvas
         ref={canvasRef}
         className="rounded-lg"
