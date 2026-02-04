@@ -68,7 +68,7 @@ const Index: React.FC = () => {
           <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
             <Brain className="w-5.5 h-5.5 text-primary-foreground" />
           </div>
-          <span className="font-bold text-lg tracking-tight text-foreground hidden sm:inline-block">MindFlow</span>
+          <span className="font-bold text-lg tracking-tight text-foreground hidden sm:inline-block">AI-MindFlow</span>
         </div>
         
         <div className="h-8 w-px bg-border/60 mx-1 hidden sm:block" />
