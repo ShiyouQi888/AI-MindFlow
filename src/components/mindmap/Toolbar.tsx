@@ -475,8 +475,8 @@ const Toolbar: React.FC = () => {
       mindmap: {
         ...mindmap,
         // Ensure dates are stringified
-        createdAt: mindmap.createdAt.toISOString(),
-        updatedAt: mindmap.updatedAt.toISOString(),
+        createdAt: new Date(mindmap.createdAt).toISOString(),
+        updatedAt: new Date(mindmap.updatedAt).toISOString(),
       }
     };
     const content = JSON.stringify(data, null, 2);
