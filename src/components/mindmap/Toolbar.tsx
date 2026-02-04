@@ -36,7 +36,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
+import { Upload } from 'lucide-react';
 
 const Toolbar: React.FC = () => {
   const { theme } = useTheme();
@@ -53,6 +55,7 @@ const Toolbar: React.FC = () => {
     applyLayout,
     layoutConfig,
     setLayoutConfig,
+    setMindmap,
   } = useMindmapStore();
 
   // Resolve theme colors for export
@@ -463,6 +466,66 @@ const Toolbar: React.FC = () => {
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  const handleExportAMF = () => {
+    const data = {
+      version: '1.0.0',
+      type: 'AI-MindFlow-Data',
+      timestamp: new Date().toISOString(),
+      mindmap: {
+        ...mindmap,
+        // Ensure dates are stringified
+        createdAt: mindmap.createdAt.toISOString(),
+        updatedAt: mindmap.updatedAt.toISOString(),
+      }
+    };
+    const content = JSON.stringify(data, null, 2);
+    const blob = new Blob([content], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = `${mindmap.name}.amf`;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("导出专属文件成功");
+  };
+
+  const handleImportAMF = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const content = event.target?.result as string;
+        const data = JSON.parse(content);
+
+        if (data.type !== 'AI-MindFlow-Data') {
+          throw new Error('不支持的文件格式');
+        }
+
+        const importedMindmap = data.mindmap;
+        // Restore Date objects
+        importedMindmap.createdAt = new Date(importedMindmap.createdAt);
+        importedMindmap.updatedAt = new Date(importedMindmap.updatedAt);
+
+        setMindmap(importedMindmap);
+        toast.success("导入专属文件成功");
+        
+        // Reset view and layout after import
+        setTimeout(() => {
+          applyLayout();
+          resetView();
+        }, 100);
+      } catch (error) {
+        console.error('Import error:', error);
+        toast.error(error instanceof Error ? error.message : "导入失败，文件格式错误");
+      }
+    };
+    reader.readAsText(file);
+    // Clear input
+    e.target.value = '';
+  };
   
   return (
     <div className="floating-panel absolute top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 p-2 bg-popover/90 text-popover-foreground">
@@ -589,9 +652,24 @@ const Toolbar: React.FC = () => {
             <span>导出为 Markdown (.md)</span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => handleExportText('txt')} className="cursor-pointer">
-            <Type className="w-4 h-4 mr-2" />
-            <span>导出为 文本 (.txt)</span>
+            <FileText className="w-4 h-4 mr-2" />
+            <span>导出为 TXT 文本</span>
           </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={handleExportAMF} className="cursor-pointer font-medium text-primary">
+            <Download className="w-4 h-4 mr-2" />
+            <span>导出为 .amf 专属文件</span>
+          </DropdownMenuItem>
+          <label className="flex items-center px-2 py-1.5 text-sm cursor-pointer hover:bg-accent rounded-sm transition-colors">
+            <Upload className="w-4 h-4 mr-2" />
+            <span>导入 .amf 专属文件</span>
+            <input
+              type="file"
+              accept=".amf"
+              className="hidden"
+              onChange={handleImportAMF}
+            />
+          </label>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
