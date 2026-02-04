@@ -1,73 +1,75 @@
-# Welcome to your Lovable project
+# AI-MindFlow | 智能思维导图
 
-## Project info
+AI-MindFlow 是一款基于 AI 驱动的现代化思维导图工具，旨在通过极简的操作与强大的 AI 协作能力，帮助用户快速梳理思绪、构建知识体系。
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## 🌟 核心功能
 
-## How can I edit this code?
+- **🚀 AI 智能创作**：一键生成思维导图分支，支持对话式内容扩充，让创意无限延伸。
+- **🎨 现代化画布交互**：
+  - **自动缩放**：当节点过多时，点击节点可自动放大聚焦，优化大图浏览体验。
+  - **一键整理**：内置多种布局算法（树状图、折线、曲线），一键解决节点重叠，保持界面整洁。
+  - **平滑动画**：所有视图切换与布局调整均配有丝滑的过渡动画。
+- **🛠️ 丰富的编辑工具**：
+  - 支持插入矩形、圆形、文本框等基础图形。
+  - 支持上传并嵌入图片。
+  - 自由连接线：可在任意节点或元素间建立逻辑关联。
+- **📤 多格式导出**：
+  - **高清图片**：支持导出 2 倍清晰度的 PNG 图片。
+  - **结构化文档**：支持导出 Markdown (.md) 和 纯文本 (.txt) 格式，方便导入其他笔记工具。
+- **🌓 响应式设计**：完美支持深色/浅色模式切换，适配各种屏幕尺寸。
 
-There are several ways of editing your application.
+## 🛠️ 技术栈
 
-**Use Lovable**
+本项目基于现代前端技术栈构建，确保了极高的性能与可维护性：
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+- **核心框架**：[React 18](https://reactjs.org/) + [TypeScript](https://www.typescriptlang.org/)
+- **构建工具**：[Vite](https://vitejs.dev/)
+- **状态管理**：[Zustand](https://github.com/pmndrs/zustand) (轻量级、高性能的状态流转)
+- **UI 组件库**：[shadcn/ui](https://ui.shadcn.com/) + [Radix UI](https://www.radix-ui.com/)
+- **样式处理**：[Tailwind CSS](https://tailwindcss.com/)
+- **图标库**：[Lucide React](https://lucide.dev/)
+- **测试工具**：[Vitest](https://vitest.dev/)
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🚀 快速上手
 
-**Use your preferred IDE**
+### 环境准备
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+确保您的本地环境已安装 [Node.js](https://nodejs.org/) (建议 v18+)。
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### 安装步骤
 
-Follow these steps:
+1. **克隆仓库**
+   ```bash
+   git clone https://github.com/ShiyouQi888/AI-MindFlow.git
+   cd AI-MindFlow
+   ```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+2. **安装依赖**
+   ```bash
+   npm install
+   # 或者使用 pnpm
+   pnpm install
+   ```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+3. **启动开发服务器**
+   ```bash
+   npm run dev
+   ```
+   访问 `http://localhost:8080` 即可开始使用。
 
-# Step 3: Install the necessary dependencies.
-npm i
+## 📖 快捷键指南
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
+- `Tab`: 添加子节点
+- `Enter`: 添加同级节点
+- `Delete / Backspace`: 删除选中节点/元素
+- `Space`: 展开/折叠分支
+- `F2`: 编辑当前选中内容
+- `Esc`: 取消选中
 
-**Edit a file directly in GitHub**
+## 🤝 贡献与反馈
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+如果您在使用过程中发现任何问题或有更好的建议，欢迎提交 [Issue](https://github.com/ShiyouQi888/AI-MindFlow/issues) 或发起 Pull Request。
 
-**Use GitHub Codespaces**
+---
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Built with ❤️ by ShiyouQi888
