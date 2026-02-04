@@ -1,0 +1,216 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Professional Mind Map Editor Design System */
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 220 25% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    --primary: 220 90% 56%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 92%;
+    --secondary-foreground: 220 25% 20%;
+
+    --muted: 220 15% 95%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 165 80% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 75% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 220 90% 56%;
+
+    --radius: 0.75rem;
+
+    /* Mind Map Specific */
+    --canvas-bg: 220 20% 97%;
+    --canvas-grid: 220 15% 90%;
+    --node-bg: 0 0% 100%;
+    --node-border: 220 15% 85%;
+    --node-selected: 220 90% 56%;
+    --node-hover: 220 90% 60%;
+    --connection-line: 220 20% 70%;
+    --connection-active: 220 90% 56%;
+
+    /* Node Level Colors */
+    --node-root: 220 90% 56%;
+    --node-level-1: 280 70% 55%;
+    --node-level-2: 165 80% 45%;
+    --node-level-3: 35 90% 55%;
+    --node-level-4: 340 75% 55%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    --background: 225 25% 8%;
+    --foreground: 210 20% 95%;
+
+    --card: 225 25% 12%;
+    --card-foreground: 210 20% 95%;
+
+    --popover: 225 25% 10%;
+    --popover-foreground: 210 20% 95%;
+
+    --primary: 220 90% 60%;
+    --primary-foreground: 225 25% 8%;
+
+    --secondary: 225 20% 18%;
+    --secondary-foreground: 210 20% 90%;
+
+    --muted: 225 20% 15%;
+    --muted-foreground: 220 15% 55%;
+
+    --accent: 165 80% 50%;
+    --accent-foreground: 225 25% 8%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 225 20% 18%;
+    --input: 225 20% 20%;
+    --ring: 220 90% 60%;
+
+    /* Mind Map Specific - Dark */
+    --canvas-bg: 225 25% 6%;
+    --canvas-grid: 225 20% 12%;
+    --node-bg: 225 25% 14%;
+    --node-border: 225 20% 22%;
+    --node-selected: 220 90% 60%;
+    --node-hover: 220 90% 65%;
+    --connection-line: 225 15% 35%;
+    --connection-active: 220 90% 60%;
+
+    /* Node Level Colors - Dark */
+    --node-root: 220 90% 60%;
+    --node-level-1: 280 70% 60%;
+    --node-level-2: 165 80% 50%;
+    --node-level-3: 35 90% 60%;
+    --node-level-4: 340 75% 60%;
+
+    --sidebar-background: 225 25% 10%;
+    --sidebar-foreground: 210 20% 90%;
+    --sidebar-primary: 220 90% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 225 20% 15%;
+    --sidebar-accent-foreground: 210 20% 90%;
+    --sidebar-border: 225 20% 18%;
+    --sidebar-ring: 220 90% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .canvas-container {
+    @apply relative w-full h-full overflow-hidden;
+    background-color: hsl(var(--canvas-bg));
+    background-image: 
+      radial-gradient(circle, hsl(var(--canvas-grid)) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .mindmap-node {
+    @apply absolute cursor-pointer select-none;
+    transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
+  }
+
+  .mindmap-node:hover {
+    transform: scale(1.02);
+  }
+
+  .mindmap-node.selected {
+    box-shadow: 0 0 0 3px hsl(var(--node-selected) / 0.4);
+  }
+
+  .toolbar-button {
+    @apply flex items-center justify-center p-2 rounded-lg transition-all duration-150;
+    @apply hover:bg-secondary active:scale-95;
+  }
+
+  .toolbar-button.active {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .floating-panel {
+    @apply bg-card border border-border rounded-xl shadow-xl;
+    backdrop-filter: blur(12px);
+  }
+
+  .node-connection {
+    stroke: hsl(var(--connection-line));
+    stroke-width: 2;
+    fill: none;
+    transition: stroke 0.15s ease;
+  }
+
+  .node-connection:hover,
+  .node-connection.active {
+    stroke: hsl(var(--connection-active));
+    stroke-width: 3;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .glass-effect {
+    backdrop-filter: blur(12px) saturate(180%);
+    background-color: hsl(var(--card) / 0.8);
+  }
+
+  /* Custom Scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full border-2 border-transparent bg-clip-padding transition-colors;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+}
