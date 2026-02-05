@@ -262,11 +262,18 @@ const MindmapCanvas: React.FC = () => {
 
     for (const el of elementList) {
       if (el.type === 'rect' || el.type === 'image' || el.type === 'video') {
+        const w = el.width || 0;
+        const h = el.height || 0;
+        const x = w < 0 ? el.position.x + w : el.position.x;
+        const y = h < 0 ? el.position.y + h : el.position.y;
+        const absW = Math.abs(w);
+        const absH = Math.abs(h);
+
         if (
-          pos.x >= el.position.x &&
-          pos.x <= el.position.x + (el.width || 0) &&
-          pos.y >= el.position.y &&
-          pos.y <= el.position.y + (el.height || 0)
+          pos.x >= x &&
+          pos.x <= x + absW &&
+          pos.y >= y &&
+          pos.y <= y + absH
         ) {
           return el.id;
         }
@@ -313,21 +320,24 @@ const MindmapCanvas: React.FC = () => {
       const el = elements[id];
       if (!el || el.type === 'text' || el.type === 'curve' || el.type === 'polyline') continue;
 
-      const x = el.position.x;
-      const y = el.position.y;
       const w = el.width || 0;
       const h = el.height || 0;
+      const x = w < 0 ? el.position.x + w : el.position.x;
+      const y = h < 0 ? el.position.y + h : el.position.y;
+      const absW = Math.abs(w);
+      const absH = Math.abs(h);
       const handleSize = 8 / viewport.zoom;
+      const padding = 2 / viewport.zoom;
 
       const handles = [
-        { name: 'nw', x: x, y: y },
-        { name: 'n', x: x + w / 2, y: y },
-        { name: 'ne', x: x + w, y: y },
-        { name: 'w', x: x, y: y + h / 2 },
-        { name: 'e', x: x + w, y: y + h / 2 },
-        { name: 'sw', x: x, y: y + h },
-        { name: 's', x: x + w / 2, y: y + h },
-        { name: 'se', x: x + w, y: y + h },
+        { name: 'nw', x: x - padding, y: y - padding },
+        { name: 'n', x: x + absW / 2, y: y - padding },
+        { name: 'ne', x: x + absW + padding, y: y - padding },
+        { name: 'w', x: x - padding, y: y + absH / 2 },
+        { name: 'e', x: x + absW + padding, y: y + absH / 2 },
+        { name: 'sw', x: x - padding, y: y + absH + padding },
+        { name: 's', x: x + absW / 2, y: y + absH + padding },
+        { name: 'se', x: x + absW + padding, y: y + absH + padding },
       ];
 
       for (const handle of handles) {
@@ -374,8 +384,15 @@ const MindmapCanvas: React.FC = () => {
         hX = el.position.x + width + 10 / viewport.zoom;
         hY = el.position.y - fontSize / 2;
       } else {
-        hX = el.position.x + (el.width || 0) + 10 / viewport.zoom;
-        hY = el.position.y + (el.height || 0) / 2;
+        const w = el.width || 0;
+        const h = el.height || 0;
+        const x = w < 0 ? el.position.x + w : el.position.x;
+        const y = h < 0 ? el.position.y + h : el.position.y;
+        const absW = Math.abs(w);
+        const absH = Math.abs(h);
+        
+        hX = x + absW + 10 / viewport.zoom;
+        hY = y + absH / 2;
       }
 
       if (Math.hypot(pos.x - hX, pos.y - hY) < handleSize) {
@@ -717,7 +734,14 @@ const MindmapCanvas: React.FC = () => {
       updateElement(inputDialog.elementId, { text: value });
     } else if (inputDialog.type === 'image' || inputDialog.type === 'video') {
       if (value) {
-        updateElement(inputDialog.elementId, { url: value });
+        const updates: any = { url: value };
+        const el = elements[inputDialog.elementId];
+        // If element is very small (default 0 or small drag), give it a decent default size
+        if (el && (!el.width || !el.height || (Math.abs(el.width) < 10 && Math.abs(el.height) < 10))) {
+          updates.width = inputDialog.type === 'video' ? 480 : 200;
+          updates.height = inputDialog.type === 'video' ? 270 : 200;
+        }
+        updateElement(inputDialog.elementId, updates);
       } else {
         deleteElement(inputDialog.elementId);
       }
@@ -1397,13 +1421,15 @@ const MindmapCanvas: React.FC = () => {
         ctx.lineWidth = 1;
         ctx.setLineDash([5, 5]);
         
-        const x = el.position.x;
-        const y = el.position.y;
         const w = el.width || 0;
         const h = el.height || 0;
+        const x = w < 0 ? el.position.x + w : el.position.x;
+        const y = h < 0 ? el.position.y + h : el.position.y;
+        const absW = Math.abs(w);
+        const absH = Math.abs(h);
   
         if (el.type === 'rect' || el.type === 'circle' || el.type === 'image' || el.type === 'video') {
-          ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
+          ctx.strokeRect(x - 2, y - 2, absW + 4, absH + 4);
           
           // Draw handles
           ctx.setLineDash([]);
@@ -1412,15 +1438,16 @@ const MindmapCanvas: React.FC = () => {
           ctx.lineWidth = 2;
           const handleSize = 6 / viewport.zoom;
 
+          const padding = 2 / viewport.zoom;
           const handles = [
-            { x: x, y: y },
-            { x: x + w / 2, y: y },
-            { x: x + w, y: y },
-            { x: x, y: y + h / 2 },
-            { x: x + w, y: y + h / 2 },
-            { x: x, y: y + h },
-            { x: x + w / 2, y: y + h },
-            { x: x + w, y: y + h },
+            { x: x - padding, y: y - padding },
+            { x: x + absW / 2, y: y - padding },
+            { x: x + absW + padding, y: y - padding },
+            { x: x - padding, y: y + absH / 2 },
+            { x: x + absW + padding, y: y + absH / 2 },
+            { x: x - padding, y: y + absH + padding },
+            { x: x + absW / 2, y: y + absH + padding },
+            { x: x + absW + padding, y: y + absH + padding },
           ];
 
           handles.forEach(h => {
@@ -1441,15 +1468,15 @@ const MindmapCanvas: React.FC = () => {
           hX = el.position.x + width + 10 / viewport.zoom;
           hY = el.position.y - fontSize / 2;
         } else {
-          const elWidth = el.width || 0;
-          const elHeight = el.height || 0;
-          const elDrawX = elWidth < 0 ? el.position.x + elWidth : el.position.x;
-          const elDrawY = elHeight < 0 ? el.position.y + elHeight : el.position.y;
-          const elDrawW = Math.abs(elWidth);
-          const elDrawH = Math.abs(elHeight);
-          
-          hX = elDrawX + elDrawW + 10 / viewport.zoom;
-          hY = elDrawY + elDrawH / 2;
+          const w = el.width || 0;
+        const h = el.height || 0;
+        const x = w < 0 ? el.position.x + w : el.position.x;
+        const y = h < 0 ? el.position.y + h : el.position.y;
+        const absW = Math.abs(w);
+        const absH = Math.abs(h);
+        
+        hX = x + absW + 10 / viewport.zoom;
+        hY = y + absH / 2;
         }
         
         ctx.beginPath();
