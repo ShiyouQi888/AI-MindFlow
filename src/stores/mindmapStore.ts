@@ -114,6 +114,7 @@ interface MindmapStore {
   generateSubNodes: (nodeId: string, prompt?: string) => Promise<void>;
   isAIProcessing: boolean;
   aiProgressMessage: string;
+  aiProcessingNodeId: string | null;
 }
 
 const createInitialMindmap = (): MindMap => {
@@ -290,6 +291,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     currentTool: 'select',
     isAIProcessing: false,
     aiProgressMessage: '',
+    aiProcessingNodeId: null,
     canvasSize: { width: 800, height: 600 },
 
     setCanvasSize: (width, height) => set({ canvasSize: { width, height } }),
@@ -1461,7 +1463,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       return;
     }
 
-    set({ isAIProcessing: true, aiProgressMessage: '正在思索中...' });
+    set({ isAIProcessing: true, aiProgressMessage: '正在思索中...', aiProcessingNodeId: nodeId });
 
     try {
       const response = await fetch(`${aiConfig.baseUrl}/v1/chat/completions`, {
@@ -1574,14 +1576,14 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         // Auto layout after adding nodes
         setTimeout(() => {
           applyLayout();
-          set({ isAIProcessing: false, aiProgressMessage: '' });
+          set({ isAIProcessing: false, aiProgressMessage: '', aiProcessingNodeId: null });
         }, 100);
       } else {
-        set({ isAIProcessing: false, aiProgressMessage: '' });
+        set({ isAIProcessing: false, aiProgressMessage: '', aiProcessingNodeId: null });
       }
     } catch (error) {
       console.error('AI generation failed:', error);
-      set({ isAIProcessing: false, aiProgressMessage: '' });
+      set({ isAIProcessing: false, aiProgressMessage: '', aiProcessingNodeId: null });
       toast.error('AI 生成失败，请检查 API 配置或网络。');
     }
   },

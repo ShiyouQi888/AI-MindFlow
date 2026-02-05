@@ -143,7 +143,7 @@ const Toolbar: React.FC = () => {
     }
   };
   
-  const handleExport = () => {
+  const handleExport = (options: { format: 'png' | 'jpg', transparent?: boolean } = { format: 'png', transparent: false }) => {
     const { nodes, elements, connections } = mindmap;
     const nodeValues = Object.values(nodes);
     const elementValues = Object.values(elements);
@@ -214,8 +214,13 @@ const Toolbar: React.FC = () => {
     ctx.scale(dpr, dpr);
     
     // Fill background
-    ctx.fillStyle = themeColors.background || (theme === 'dark' ? 'hsl(225, 25%, 9%)' : 'hsl(220, 20%, 97%)');
-    ctx.fillRect(0, 0, width, height);
+    if (options.format === 'jpg') {
+      ctx.fillStyle = '#ffffff'; // JPG always has a background, usually white
+      ctx.fillRect(0, 0, width, height);
+    } else if (!options.transparent) {
+      ctx.fillStyle = themeColors.background || (theme === 'dark' ? 'hsl(225, 25%, 9%)' : 'hsl(220, 20%, 97%)');
+      ctx.fillRect(0, 0, width, height);
+    }
 
     // Offset the context to the top-left of the bounding box
     ctx.translate(-minX, -minY);
@@ -450,8 +455,9 @@ const Toolbar: React.FC = () => {
     });
 
     const link = document.createElement('a');
-    link.download = `${mindmap.name}.png`;
-    link.href = tempCanvas.toDataURL('image/png');
+    const extension = options.format;
+    link.download = `${mindmap.name}.${extension}`;
+    link.href = tempCanvas.toDataURL(`image/${options.format === 'jpg' ? 'jpeg' : 'png'}`, 0.9);
     link.click();
   };
 
@@ -688,10 +694,15 @@ const Toolbar: React.FC = () => {
           </TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleExport} className="cursor-pointer">
+          <DropdownMenuItem onClick={() => handleExport({ format: 'png', transparent: true })} className="cursor-pointer">
             <ImageIcon className="w-4 h-4 mr-2" />
-            <span>导出为 PNG 图片</span>
+            <span>导出为 PNG 图片 (透明背景)</span>
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => handleExport({ format: 'jpg', transparent: false })} className="cursor-pointer">
+            <ImageIcon className="w-4 h-4 mr-2" />
+            <span>导出为 JPG 图片 (白色背景)</span>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => handleExportText('md')} className="cursor-pointer">
             <FileText className="w-4 h-4 mr-2" />
             <span>导出为 Markdown (.md)</span>

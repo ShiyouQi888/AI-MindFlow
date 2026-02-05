@@ -3,6 +3,7 @@ import { useTheme } from 'next-themes';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { getNodeColor, MindNode, Position, CanvasElement, ToolType } from '@/types/mindmap';
 import { getEmbedUrl } from '@/lib/utils';
+import { Maximize, Minimize, X, RotateCcw, Play, Pause } from 'lucide-react';
 import InputDialog from './InputDialog';
 import InlineAIInput from './InlineAIInput';
 
@@ -49,6 +50,7 @@ const MindmapCanvas: React.FC = () => {
     aiConfig,
     isAIProcessing,
     aiProgressMessage,
+    aiProcessingNodeId,
     editingElementId,
     setEditingElement,
     setCanvasSize,
@@ -125,7 +127,6 @@ const MindmapCanvas: React.FC = () => {
   const [drawingId, setDrawingId] = React.useState<string | null>(null);
    const [startPos, setStartPos] = React.useState<Position | null>(null);
    const imageCache = useRef<Record<string, HTMLImageElement>>({});
-   const videoCache = useRef<Record<string, HTMLVideoElement>>({});
    
    const [inputDialog, setInputDialog] = useState<{
      isOpen: boolean;
@@ -149,6 +150,15 @@ const MindmapCanvas: React.FC = () => {
 
   // Track activated third-party videos
   const [activatedVideos, setActivatedVideos] = useState<Record<string, boolean>>({});
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Reset activated videos when selection changes
   useEffect(() => {
@@ -166,22 +176,6 @@ const MindmapCanvas: React.FC = () => {
   }, [selectionState.selectedElementIds]);
 
   const lastSubmittedElementId = useRef<string | null>(null);
-  
-  // Video playback loop
-  useEffect(() => {
-    let animationId: number;
-    
-    const checkVideoPlayback = () => {
-      const anyVideoPlaying = Object.values(videoCache.current).some(v => !v.paused && !v.ended);
-      if (anyVideoPlaying) {
-        forceRender();
-      }
-      animationId = requestAnimationFrame(checkVideoPlayback);
-    };
-    
-    animationId = requestAnimationFrame(checkVideoPlayback);
-    return () => cancelAnimationFrame(animationId);
-  }, [forceRender]);
 
   // Transform client coordinates to canvas coordinates
   const clientToCanvas = useCallback((clientX: number, clientY: number): Position => {
@@ -1712,98 +1706,24 @@ const MindmapCanvas: React.FC = () => {
           const drawH = Math.abs(vidHeight);
           
           if (el.url) {
+            // Draw placeholder for all videos on canvas
+            // The actual video is rendered in the Overlay layer for better stability
+            ctx.fillStyle = theme === 'dark' ? '#1f2937' : '#f3f4f6';
+            ctx.fillRect(drawX, drawY, drawW, drawH);
+            ctx.strokeStyle = theme === 'dark' ? '#374151' : '#e5e7eb';
+            ctx.strokeRect(drawX, drawY, drawW, drawH);
+            
+            ctx.fillStyle = theme === 'dark' ? '#9ca3af' : '#6b7280';
+            ctx.font = `${14 / viewport.zoom}px sans-serif`;
+            ctx.textAlign = 'center';
+            
             const { type: videoType } = getEmbedUrl(el.url);
-            if (videoType === 'embed') {
-              // Draw placeholder for embedded videos on canvas
-              ctx.fillStyle = theme === 'dark' ? '#1f2937' : '#f3f4f6';
-              ctx.fillRect(drawX, drawY, drawW, drawH);
-              ctx.strokeStyle = theme === 'dark' ? '#374151' : '#e5e7eb';
-              ctx.strokeRect(drawX, drawY, drawW, drawH);
-              
-              ctx.fillStyle = theme === 'dark' ? '#9ca3af' : '#6b7280';
-              ctx.font = `${14 / viewport.zoom}px sans-serif`;
-              ctx.textAlign = 'center';
-              ctx.fillText('第三方播放器', drawX + drawW / 2, drawY + drawH / 2);
-              ctx.textAlign = 'left'; // Reset
-              break;
-            }
-
-            let video = videoCache.current[el.url];
-            if (!video) {
-              video = document.createElement('video');
-              video.src = el.url;
-              video.muted = true;
-              video.loop = true;
-              video.playsInline = true;
-              video.crossOrigin = 'anonymous';
-              video.preload = 'auto';
-              
-              video.onloadeddata = () => {
-                videoCache.current[el.url!] = video!;
-                if (!storedWidth || !storedHeight || Math.abs(storedWidth) < 2 || Math.abs(storedHeight) < 2) {
-                  const maxWidth = 400;
-                  const ratio = video!.videoHeight / video!.videoWidth;
-                  const width = Math.min(maxWidth, video!.videoWidth);
-                  const height = width * ratio;
-                  updateElement(el.id, { width, height });
-                }
-                forceRender();
-              };
-              
-              video.onerror = () => {
-                ctx.strokeStyle = '#ef4444';
-                ctx.strokeRect(drawX, drawY, drawW, drawH);
-                ctx.fillStyle = '#ef4444';
-                ctx.fillText('视频加载失败', drawX + 5, drawY + 15);
-              };
-              
-              videoCache.current[el.url] = video;
-              video.load();
-            }
-
-            if (video.readyState >= 2) { // HAVE_CURRENT_DATA
-               ctx.drawImage(video, drawX, drawY, drawW, drawH);
-               
-               // Draw play/pause button overlay if not playing or if hovered
-               if (video.paused || isHovered || isSelected) {
-                 ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                 ctx.fillRect(drawX, drawY, drawW, drawH);
-                 
-                 const centerX = drawX + drawW / 2;
-                 const centerY = drawY + drawH / 2;
-                 const radius = Math.min(drawW, drawH) * 0.2;
-                 
-                 ctx.beginPath();
-                 ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                 ctx.fill();
-                 
-                 if (video.paused) {
-                   // Draw Play triangle
-                   ctx.beginPath();
-                   const triSize = radius * 0.5;
-                   ctx.moveTo(centerX - triSize * 0.4, centerY - triSize);
-                   ctx.lineTo(centerX + triSize * 0.8, centerY);
-                   ctx.lineTo(centerX - triSize * 0.4, centerY + triSize);
-                   ctx.closePath();
-                   ctx.fillStyle = '#000000';
-                   ctx.fill();
-                 } else {
-                   // Draw Pause bars
-                   const barW = radius * 0.2;
-                   const barH = radius * 0.8;
-                   ctx.fillStyle = '#000000';
-                   ctx.fillRect(centerX - barW * 1.5, centerY - barH / 2, barW, barH);
-                   ctx.fillRect(centerX + barW * 0.5, centerY - barH / 2, barW, barH);
-                 }
-               }
-             } else {
-              ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
-              ctx.strokeRect(drawX, drawY, drawW, drawH);
-              ctx.fillStyle = el.style.stroke || colors.primary || '#3b82f6';
-              ctx.font = '12px Inter';
-              ctx.fillText('正在加载视频...', drawX + 5, drawY + 15);
-            }
+            ctx.fillText(
+              videoType === 'embed' ? '第三方播放器' : '视频文件', 
+              drawX + drawW / 2, 
+              drawY + drawH / 2
+            );
+            ctx.textAlign = 'left'; // Reset
           } else {
             ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
             ctx.strokeRect(drawX, drawY, drawW, drawH);
@@ -2106,12 +2026,37 @@ const MindmapCanvas: React.FC = () => {
       )}
 
       {/* AI Processing Status */}
-      {isAIProcessing && (
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-violet-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 z-50">
-          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          <span className="text-sm font-medium">{aiProgressMessage}</span>
-        </div>
-      )}
+      {isAIProcessing && (() => {
+        const processingNode = aiProcessingNodeId ? nodes[aiProcessingNodeId] : null;
+        
+        if (processingNode) {
+          const x = (processingNode.position.x * viewport.zoom) + viewport.x;
+          const y = (processingNode.position.y * viewport.zoom) + viewport.y;
+          const nodeHeight = processingNode.height * viewport.zoom;
+          
+          return (
+            <div 
+              className="absolute bg-violet-600 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-in fade-in zoom-in-95 duration-300 z-50 whitespace-nowrap"
+              style={{
+                left: x,
+                top: y + (nodeHeight / 2) + 20,
+                transform: 'translateX(-50%)',
+              }}
+            >
+              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span className="text-xs font-medium">{aiProgressMessage}</span>
+            </div>
+          );
+        }
+
+        // Fallback to bottom if no node is associated (should not happen with new logic)
+        return (
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 bg-violet-600 text-white px-6 py-3 rounded-full shadow-lg flex items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300 z-50">
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <span className="text-sm font-medium">{aiProgressMessage}</span>
+          </div>
+        );
+      })()}
 
       {/* Third-party Video Overlays */}
       <div 
@@ -2121,7 +2066,6 @@ const MindmapCanvas: React.FC = () => {
         {Object.values(elements).map(el => {
           if (el.type !== 'video' || !el.url) return null;
           const { url: embedUrl, type: videoType } = getEmbedUrl(el.url);
-          if (videoType !== 'embed') return null;
 
           const x = (el.position.x * viewport.zoom) + viewport.x;
           const y = (el.position.y * viewport.zoom) + viewport.y;
@@ -2151,7 +2095,7 @@ const MindmapCanvas: React.FC = () => {
           return (
             <div
               key={el.id}
-              className="absolute bg-black group"
+              className="absolute bg-black group video-container"
               style={{
                 left: x,
                 top: y,
@@ -2167,18 +2111,43 @@ const MindmapCanvas: React.FC = () => {
               }}
             >
               <div className="relative w-full h-full overflow-hidden">
-                <iframe
-                  src={embedUrl}
-                  className="w-full h-full border-none"
-                  style={{ pointerEvents: isActivated ? 'auto' : 'none' }}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
+                {videoType === 'embed' ? (
+                  <iframe
+                    src={embedUrl}
+                    className="w-full h-full border-none"
+                    style={{ pointerEvents: isActivated ? 'auto' : 'none' }}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                  />
+                ) : (
+                  <video
+                    src={el.url}
+                    className="w-full h-full object-contain"
+                    style={{ pointerEvents: isActivated ? 'auto' : 'none' }}
+                    controls={isActivated}
+                    autoPlay={isActivated}
+                    muted={false}
+                    loop
+                    playsInline
+                  />
+                )}
                 
                 {/* Activation Overlay */}
                 {!isActivated && (
                   <div 
-                    className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer pointer-events-auto"
+                    className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-move pointer-events-auto"
+                    onMouseDown={(e) => {
+                      // Only trigger drag if it's a left click and not clicking the play button directly
+                      if (e.button !== 0) return;
+                      
+                      const playButton = e.currentTarget.querySelector('.play-button');
+                      if (playButton && playButton.contains(e.target as Node)) return;
+
+                      e.stopPropagation();
+                      const pos = clientToCanvas(e.clientX, e.clientY);
+                      selectElement(el.id, e.shiftKey);
+                      startDrag(el.id, pos, 'element');
+                    }}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (isSelected) {
@@ -2188,28 +2157,89 @@ const MindmapCanvas: React.FC = () => {
                       }
                     }}
                   >
-                    <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
+                    <div className="play-button w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
                       <div className="w-0 h-0 border-t-[10px] border-t-transparent border-l-[18px] border-l-black border-b-[10px] border-b-transparent ml-1" />
                     </div>
                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-                      {isSelected ? '点击开始播放' : '点击选中'}
+                      {isSelected ? '点击开始播放' : '点击选中并拖拽'}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* Drag Handle - Top Bar */}
+              {/* Drag Handle & Control Bar - Top Bar */}
               <div 
-                className="absolute top-0 left-0 right-0 h-8 bg-black/20 hover:bg-black/40 cursor-move pointer-events-auto opacity-0 group-hover:opacity-100 transition-opacity flex items-center px-2"
+                className={`absolute top-0 left-0 right-0 h-10 bg-black/60 hover:bg-black/80 cursor-move pointer-events-auto flex items-center justify-between px-3 transition-opacity z-20 ${isSelected || !isActivated ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
                 onMouseDown={(e) => {
+                  if ((e.target as HTMLElement).closest('button')) return;
                   e.stopPropagation();
                   const pos = clientToCanvas(e.clientX, e.clientY);
                   selectElement(el.id, e.shiftKey);
                   startDrag(el.id, pos, 'element');
                 }}
               >
-                <div className="flex gap-1">
-                  {[1, 2, 3].map(i => <div key={i} className="w-1 h-1 rounded-full bg-white/60" />)}
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1.5 mr-2">
+                    {[1, 2, 3].map(i => <div key={i} className="w-1.5 h-1.5 rounded-full bg-white/80" />)}
+                  </div>
+                  {isSelected && (
+                    <div className="text-[10px] text-white/80 font-medium tracking-wider uppercase bg-white/10 px-2 py-0.5 rounded">
+                      视频
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {isActivated && (
+                    <>
+                      <button
+                        title="刷新视频"
+                        className="p-1.5 hover:bg-white/20 text-white rounded-md transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Force reload by briefly clearing and re-setting the URL or using a key
+                          const originalUrl = el.url;
+                          updateElement(el.id, { url: '' });
+                          setTimeout(() => updateElement(el.id, { url: originalUrl }), 10);
+                        }}
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        title={isFullscreen ? "退出全屏" : "全屏播放"}
+                        className="p-1.5 hover:bg-white/20 text-white rounded-md transition-colors"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const container = e.currentTarget.closest('.video-container');
+                          if (container) {
+                            if (document.fullscreenElement) {
+                              document.exitFullscreen();
+                            } else {
+                              container.requestFullscreen();
+                            }
+                          }
+                        }}
+                      >
+                        {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
+                      </button>
+                      <div className="w-px h-4 bg-white/20 mx-1" />
+                      <button
+                        title="退出播放模式"
+                        className="flex items-center gap-1.5 px-2 py-1 hover:bg-red-500/80 text-white rounded-md transition-colors text-[11px] font-medium"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActivatedVideos(prev => {
+                            const next = { ...prev };
+                            delete next[el.id];
+                            return next;
+                          });
+                        }}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>退出播放</span>
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
