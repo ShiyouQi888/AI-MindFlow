@@ -127,7 +127,7 @@ const MindmapCanvas: React.FC = () => {
    const [inputDialog, setInputDialog] = useState<{
      isOpen: boolean;
      elementId: string | null;
-     type: 'text' | 'image' | null;
+     type: 'text' | 'image' | 'video' | null;
      defaultValue: string;
    }>({
      isOpen: false,
@@ -713,7 +713,7 @@ const MindmapCanvas: React.FC = () => {
 
     if (inputDialog.type === 'text') {
       updateElement(inputDialog.elementId, { text: value });
-    } else if (inputDialog.type === 'image') {
+    } else if (inputDialog.type === 'image' || inputDialog.type === 'video') {
       if (value) {
         updateElement(inputDialog.elementId, { url: value });
       } else {
@@ -1250,13 +1250,14 @@ const MindmapCanvas: React.FC = () => {
               video.loop = true;
               video.playsInline = true;
               video.crossOrigin = 'anonymous';
+              video.preload = 'auto';
               
               video.onloadeddata = () => {
-                videoCache.current[el.url!] = video;
+                videoCache.current[el.url!] = video!;
                 if (!storedWidth || !storedHeight || Math.abs(storedWidth) < 2 || Math.abs(storedHeight) < 2) {
                   const maxWidth = 400;
-                  const ratio = video.videoHeight / video.videoWidth;
-                  const width = Math.min(maxWidth, video.videoWidth);
+                  const ratio = video!.videoHeight / video!.videoWidth;
+                  const width = Math.min(maxWidth, video!.videoWidth);
                   const height = width * ratio;
                   updateElement(el.id, { width, height });
                 }
@@ -1271,6 +1272,7 @@ const MindmapCanvas: React.FC = () => {
               };
               
               videoCache.current[el.url] = video;
+              video.load();
             }
 
             if (video.readyState >= 2) { // HAVE_CURRENT_DATA
@@ -1537,10 +1539,22 @@ const MindmapCanvas: React.FC = () => {
         isOpen={inputDialog.isOpen}
         onClose={handleInputDialogClose}
         onSubmit={handleInputDialogSubmit}
-        title={inputDialog.type === 'text' ? '编辑文字' : '添加图片'}
-        type={inputDialog.type}
+        title={
+          inputDialog.type === 'text' 
+            ? '编辑文字' 
+            : inputDialog.type === 'video' 
+              ? '添加视频' 
+              : '添加图片'
+        }
+        type={inputDialog.type || 'text'}
         defaultValue={inputDialog.defaultValue}
-        placeholder={inputDialog.type === 'text' ? '请输入文字内容' : 'https://example.com/image.png'}
+        placeholder={
+          inputDialog.type === 'text' 
+            ? '请输入文字内容' 
+            : inputDialog.type === 'video'
+              ? 'https://example.com/video.mp4'
+              : 'https://example.com/image.png'
+        }
       />
 
       {aiInputState.isOpen && aiInputState.nodeId && nodes[aiInputState.nodeId] && (
