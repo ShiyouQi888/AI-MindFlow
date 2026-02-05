@@ -1340,7 +1340,7 @@ const MindmapCanvas: React.FC = () => {
         const w = el.width || 0;
         const h = el.height || 0;
   
-        if (el.type === 'rect' || el.type === 'circle' || el.type === 'image') {
+        if (el.type === 'rect' || el.type === 'circle' || el.type === 'image' || el.type === 'video') {
           ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
           
           // Draw handles
@@ -1399,7 +1399,7 @@ const MindmapCanvas: React.FC = () => {
         const y = el.position.y;
         const w = el.width || 0;
         const h = el.height || 0;
-        if (el.type === 'rect' || el.type === 'circle' || el.type === 'image') {
+        if (el.type === 'rect' || el.type === 'circle' || el.type === 'image' || el.type === 'video') {
           ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
         }
       }

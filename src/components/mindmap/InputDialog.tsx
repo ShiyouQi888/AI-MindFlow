@@ -108,59 +108,81 @@ const InputDialog: React.FC<InputDialogProps> = ({
 
         {type === 'image' || type === 'video' ? (
           <div className="py-4">
-            <Tabs defaultValue="upload" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="upload" className="flex items-center gap-2">
-                  <Upload className="w-4 h-4" /> 上传{type === 'image' ? '图片' : '视频'}
-                </TabsTrigger>
-                <TabsTrigger value="url" className="flex items-center gap-2">
-                  <LinkIcon className="w-4 h-4" /> {type === 'image' ? '图片' : '视频'} URL
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="upload">
-                <div 
-                  className="border-2 border-dashed border-border rounded-xl p-10 flex flex-col items-center justify-center gap-4 hover:border-primary/50 hover:bg-accent/50 transition-all cursor-pointer"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Upload className="w-7 h-7 text-primary" />
+            {type === 'image' ? (
+              <Tabs defaultValue="upload" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="upload" className="flex items-center gap-2">
+                    <Upload className="w-4 h-4" /> 上传图片
+                  </TabsTrigger>
+                  <TabsTrigger value="url" className="flex items-center gap-2">
+                    <LinkIcon className="w-4 h-4" /> 图片 URL
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="upload">
+                  <div 
+                    className="border-2 border-dashed border-border rounded-xl p-10 flex flex-col items-center justify-center gap-4 hover:border-primary/50 hover:bg-accent/50 transition-all cursor-pointer"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Upload className="w-7 h-7 text-primary" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-base font-medium">点击或拖拽上传图片</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        支持 JPG, PNG, GIF, SVG
+                      </p>
+                    </div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleFileChange}
+                    />
+                    {isUploading && <p className="text-xs text-primary animate-pulse">正在处理...</p>}
                   </div>
-                  <div className="text-center">
-                    <p className="text-base font-medium">点击或拖拽上传{type === 'image' ? '图片' : '视频'}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {type === 'image' ? '支持 JPG, PNG, GIF, SVG' : '支持 MP4, WebM, OGG'}
-                    </p>
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept={type === 'image' ? "image/*" : "video/*"}
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-                  {isUploading && <p className="text-xs text-primary animate-pulse">正在处理...</p>}
+                </TabsContent>
+                
+                <TabsContent value="url">
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <Input
+                      autoFocus
+                      value={value}
+                      onChange={(e) => setValue(e.target.value)}
+                      placeholder="请输入图片 URL (https://...)"
+                      className="w-full h-12 text-base"
+                    />
+                    <DialogFooter>
+                      <Button type="button" variant="outline" onClick={onClose} className="rounded-full px-6">
+                        取消
+                      </Button>
+                      <Button type="submit" disabled={!value} className="rounded-full px-8">确定</Button>
+                    </DialogFooter>
+                  </form>
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="flex items-center gap-2 mb-2 text-sm text-muted-foreground">
+                  <LinkIcon className="w-4 h-4" />
+                  <span>请输入视频链接 (支持 MP4, WebM 等)</span>
                 </div>
-              </TabsContent>
-              
-              <TabsContent value="url">
-                <form onSubmit={handleSubmit} className="space-y-4">
-                  <Input
-                    autoFocus
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    placeholder={`请输入${type === 'image' ? '图片' : '视频'} URL (https://...)`}
-                    className="w-full h-12 text-base"
-                  />
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={onClose} className="rounded-full px-6">
-                      取消
-                    </Button>
-                    <Button type="submit" disabled={!value} className="rounded-full px-8">确定</Button>
-                  </DialogFooter>
-                </form>
-              </TabsContent>
-            </Tabs>
+                <Input
+                  autoFocus
+                  value={value}
+                  onChange={(e) => setValue(e.target.value)}
+                  placeholder="https://example.com/video.mp4"
+                  className="w-full h-12 text-base"
+                />
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={onClose} className="rounded-full px-6">
+                    取消
+                  </Button>
+                  <Button type="submit" disabled={!value} className="rounded-full px-8">确定</Button>
+                </DialogFooter>
+              </form>
+            )}
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="py-4 space-y-4">
