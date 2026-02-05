@@ -5,8 +5,9 @@ import LeftToolbar from '@/components/mindmap/LeftToolbar';
 import HelpPanel from '@/components/mindmap/HelpPanel';
 import MiniMap from '@/components/mindmap/MiniMap';
 import StylePanel from '@/components/mindmap/StylePanel';
-import AISettings from '@/components/mindmap/AISettings';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import ElectronTitleBar from '@/components/ElectronTitleBar';
+import UserMenu from '@/components/auth/UserMenu';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { FilePlus, Save, AlertTriangle, ChevronRight, History, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -62,18 +63,10 @@ const Index: React.FC = () => {
   
   return (
     <div className="w-screen h-screen bg-background overflow-hidden flex flex-col">
+      <ElectronTitleBar />
       {/* Header */}
       <header className="flex-shrink-0 h-14 border-b border-border flex items-center px-4 gap-4 bg-card/50 backdrop-blur-md z-50">
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center shadow-lg shadow-primary/10">
-            <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
-          </div>
-          <span className="font-bold text-lg tracking-tight text-foreground hidden sm:inline-block">AI-MindFlow</span>
-        </div>
-        
-        <div className="h-8 w-px bg-border/60 mx-1 hidden sm:block" />
-        
-        {/* Recent Mindmaps List - Added here */}
+        {/* Simplified Header - Removed redundant logo and name if requested, but keeping recent list */}
         <div className="flex-1 flex items-center gap-2 overflow-hidden">
           <div className="flex items-center gap-1.5 text-muted-foreground mr-1 flex-shrink-0">
             <History className="w-4 h-4" />
@@ -206,6 +199,10 @@ const Index: React.FC = () => {
           
           <ThemeToggle />
           
+          <div className="h-6 w-px bg-border/40" />
+          
+          <UserMenu />
+          
           <div className="text-[11px] font-medium text-muted-foreground bg-muted/50 px-2 py-0.5 rounded border border-border/50 hidden sm:block">
             {Object.keys(mindmap.nodes).length} 节点
           </div>
@@ -220,7 +217,6 @@ const Index: React.FC = () => {
         <StylePanel />
         <HelpPanel />
         <MiniMap />
-        <AISettings />
       </main>
     </div>
   );

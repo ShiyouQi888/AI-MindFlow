@@ -744,17 +744,6 @@ const MindmapCanvas: React.FC = () => {
             console.log('Double clicked text element, opening inline editor', elementId);
             setEditingElement(elementId);
             return;
-          } else if (el.type === 'video' && el.url) {
-            const video = videoCache.current[el.url];
-            if (video) {
-              if (video.paused) {
-                video.play().catch(console.error);
-              } else {
-                video.pause();
-              }
-              forceRender();
-              return;
-            }
           }
         }
       } else {

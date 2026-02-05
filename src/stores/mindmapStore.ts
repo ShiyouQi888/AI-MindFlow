@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { useAuthStore } from './authStore';
 import { 
   MindNode, 
   MindMap, 
@@ -25,9 +27,9 @@ export interface ColorPalette {
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
 const DEFAULT_AI_CONFIG: AIConfig = {
-  apiKey: '',
-  baseUrl: 'https://api.deepseek.com',
-  model: 'deepseek-chat',
+  apiKey: import.meta.env.VITE_DEEPSEEK_API_KEY || '',
+  baseUrl: import.meta.env.VITE_DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
+  model: import.meta.env.VITE_DEEPSEEK_MODEL || 'deepseek-chat',
   enabled: false,
 };
 
@@ -51,6 +53,7 @@ interface MindmapStore {
   setMindmap: (mindmap: MindMap) => void;
   loadMindmap: (id: string) => void;
   deleteMindmap: (id: string) => void;
+  fetchUserMindmaps: () => Promise<void>;
   setCurrentTool: (tool: ToolType) => void;
   addNode: (parentId: string, text?: string, side?: 'left' | 'right') => string;
   updateNodeText: (nodeId: string, text: string) => void;
@@ -89,6 +92,7 @@ interface MindmapStore {
   focusNode: (nodeId: string, canvasWidth: number, canvasHeight: number) => void;
   organizeMindmap: (canvasWidth?: number, canvasHeight?: number) => void;
   setCanvasSize: (width: number, height: number) => void;
+  resetAll: () => void;
   canvasSize: { width: number; height: number };
   
   // Layout
@@ -258,13 +262,51 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     return newList;
   };
 
+  const persistMindmap = async (mindmap: MindMap) => {
+    // Always save to localStorage for offline support/quick load
+    localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(mindmap));
+    
+    // Save to Supabase if logged in and configured
+    const user = useAuthStore.getState().user;
+    if (user && isSupabaseConfigured) {
+      try {
+        const { error } = await supabase
+          .from('mindmaps')
+          .upsert({
+            id: mindmap.id,
+            user_id: user.id,
+            name: mindmap.name,
+            data: mindmap,
+            updated_at: new Date().toISOString(),
+          });
+        
+        if (error) console.error('Failed to sync to Supabase:', error);
+      } catch (e) {
+        console.error('Supabase sync error:', e);
+      }
+    }
+  };
+
+  const logActivity = async (action: string, details?: any) => {
+    const user = useAuthStore.getState().user;
+    if (user && isSupabaseConfigured) {
+      await supabase.from('activity_logs').insert({
+        user_id: user.id,
+        action,
+        details,
+      });
+    }
+  };
+
   return {
     mindmap: currentMindmap,
     savedMindmaps,
     aiConfig: {
       ...DEFAULT_AI_CONFIG,
-      apiKey: localStorage.getItem('deepseek_api_key') || '',
-      enabled: !!localStorage.getItem('deepseek_api_key'),
+      apiKey: localStorage.getItem('deepseek_api_key') || DEFAULT_AI_CONFIG.apiKey,
+      baseUrl: localStorage.getItem('deepseek_base_url') || DEFAULT_AI_CONFIG.baseUrl,
+      model: localStorage.getItem('deepseek_model') || DEFAULT_AI_CONFIG.model,
+      enabled: !!(localStorage.getItem('deepseek_api_key') || DEFAULT_AI_CONFIG.apiKey),
     },
     dragState: {
       isDragging: false,
@@ -293,15 +335,39 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     aiProgressMessage: '',
     aiProcessingNodeId: null,
     canvasSize: { width: 800, height: 600 },
-
+    
     setCanvasSize: (width, height) => set({ canvasSize: { width, height } }),
+
+    resetAll: () => {
+      const initialMindmap = createInitialMindmap();
+      localStorage.removeItem('aimindflow_current_mindmap');
+      localStorage.removeItem('aimindflow_saved_mindmaps');
+      set({ 
+        mindmap: initialMindmap, 
+        savedMindmaps: [],
+        selectionState: {
+          selectedNodeIds: [],
+          selectedElementIds: [],
+          selectedConnectionIds: [],
+          hoveredNodeId: null,
+          hoveredElementId: null,
+          hoveredConnectionId: null,
+        }
+      });
+    },
 
     setAIConfig: (config) => {
       set((state) => {
         const newConfig = { ...state.aiConfig, ...config };
         if (config.apiKey !== undefined) {
           localStorage.setItem('deepseek_api_key', config.apiKey);
-          newConfig.enabled = !!config.apiKey;
+          newConfig.enabled = !!(config.apiKey || DEFAULT_AI_CONFIG.apiKey);
+        }
+        if (config.baseUrl !== undefined) {
+          localStorage.setItem('deepseek_base_url', config.baseUrl);
+        }
+        if (config.model !== undefined) {
+          localStorage.setItem('deepseek_model', config.model);
         }
         return { aiConfig: newConfig };
       });
@@ -310,7 +376,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     setMindmap: (mindmap) => {
       set((state) => {
         const updatedMindmap = { ...mindmap, updatedAt: new Date() };
-        localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(updatedMindmap));
+        persistMindmap(updatedMindmap);
         return { 
           mindmap: updatedMindmap,
           savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
@@ -337,7 +403,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           editingNodeId: null,
           editingElementId: null,
         });
-        localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(updatedMindmap));
+        persistMindmap(updatedMindmap);
         setTimeout(() => get().applyLayout(), 0);
       }
     },
@@ -347,9 +413,18 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         const newList = state.savedMindmaps.filter(m => m.id !== id);
         localStorage.setItem('aimindflow_saved_mindmaps', JSON.stringify(newList));
         
+        // Delete from Supabase if logged in and configured
+        const user = useAuthStore.getState().user;
+        if (user && isSupabaseConfigured) {
+          supabase.from('mindmaps').delete().eq('id', id).then(({ error }) => {
+            if (error) console.error('Failed to delete from Supabase:', error);
+          });
+          logActivity('delete_mindmap', { id });
+        }
+
         if (state.mindmap.id === id) {
           const nextMindmap = newList[0] || createInitialMindmap();
-          localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(nextMindmap));
+          persistMindmap(nextMindmap);
           return { 
             mindmap: nextMindmap,
             savedMindmaps: newList.length > 0 ? newList : [nextMindmap]
@@ -358,6 +433,44 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         
         return { savedMindmaps: newList };
       });
+    },
+  
+    fetchUserMindmaps: async () => {
+      if (!isSupabaseConfigured) return;
+      const user = useAuthStore.getState().user;
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from('mindmaps')
+        .select('data, updated_at')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+
+      if (error) {
+        console.error('Failed to fetch mindmaps from Supabase:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const mindmaps = data.map(item => item.data as MindMap);
+        const currentMindmap = get().mindmap;
+        
+        // If current mindmap is default and cloud has data, load the latest cloud one
+        const isDefault = currentMindmap.name === 'My Mind Map' && 
+                         Object.keys(currentMindmap.nodes).length <= 6; // Initial nodes count
+        
+        if (isDefault) {
+          set({ 
+            mindmap: mindmaps[0],
+            savedMindmaps: mindmaps 
+          });
+          localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(mindmaps[0]));
+        } else {
+          set({ savedMindmaps: mindmaps });
+        }
+        
+        localStorage.setItem('aimindflow_saved_mindmaps', JSON.stringify(mindmaps));
+      }
     },
   
   setCurrentTool: (tool) => set({ currentTool: tool }),
@@ -459,7 +572,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         },
         updatedAt: new Date(),
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newMindmap));
+      persistMindmap(newMindmap);
       return { 
         mindmap: newMindmap,
         savedMindmaps: updateSavedList(newMindmap, state.savedMindmaps)
@@ -473,36 +586,38 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
   
   updateNodeText: (nodeId, text) => {
-    set((state) => {
-      const node = state.mindmap.nodes[nodeId];
-      if (!node) return state;
+      const oldText = get().mindmap.nodes[nodeId]?.text;
+      set((state) => {
+        const node = state.mindmap.nodes[nodeId];
+        if (!node) return state;
 
-      const level = node.level;
-      const baseWidth = level === 0 ? 40 : 32;
-      const charWidth = level === 0 ? 16 : 14;
-      const width = Math.max(level === 0 ? 120 : 80, text.length * charWidth + baseWidth);
+        const level = node.level;
+        const baseWidth = level === 0 ? 40 : 32;
+        const charWidth = level === 0 ? 16 : 14;
+        const width = Math.max(level === 0 ? 120 : 80, text.length * charWidth + baseWidth);
 
-      const newMindmap = {
-        ...state.mindmap,
-        nodes: {
-          ...state.mindmap.nodes,
-          [nodeId]: {
-            ...node,
-            text,
-            width,
+        const newMindmap = {
+          ...state.mindmap,
+          nodes: {
+            ...state.mindmap.nodes,
+            [nodeId]: {
+              ...node,
+              text,
+              width,
+            },
           },
-        },
-        updatedAt: new Date(),
-      };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newMindmap));
-      return { 
-        mindmap: newMindmap,
-        savedMindmaps: updateSavedList(newMindmap, state.savedMindmaps)
-      };
-    });
-    // Re-layout after text change as width changed
-    setTimeout(() => get().applyLayout(), 0);
-  },
+          updatedAt: new Date(),
+        };
+        persistMindmap(newMindmap);
+        return { 
+          mindmap: newMindmap,
+          savedMindmaps: updateSavedList(newMindmap, state.savedMindmaps)
+        };
+      });
+      logActivity('update_node_text', { nodeId, oldText, newText: text });
+      // Re-layout after text change as width changed
+      setTimeout(() => get().applyLayout(), 0);
+    },
   
   updateMindmapName: (name) => {
     set((state) => {
@@ -511,7 +626,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         name,
         updatedAt: new Date(),
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newMindmap));
+      persistMindmap(newMindmap);
       return { 
         mindmap: newMindmap,
         savedMindmaps: updateSavedList(newMindmap, state.savedMindmaps)
@@ -521,8 +636,9 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
   createNewMindmap: () => {
     const newMindmap = createInitialMindmap();
+    logActivity('create_mindmap', { id: newMindmap.id, name: newMindmap.name });
     set((state) => {
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newMindmap));
+      persistMindmap(newMindmap);
       return { 
         mindmap: newMindmap,
         savedMindmaps: updateSavedList(newMindmap, state.savedMindmaps),
@@ -560,7 +676,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           updatedAt: new Date(),
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
   },
@@ -614,10 +730,11 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           selectedNodeIds: state.selectionState.selectedNodeIds.filter((id) => !toDelete.has(id)),
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
     
+    logActivity('delete_node', { nodeId, text: node.text, descendantsCount: toDelete.size });
     setTimeout(() => get().applyLayout(), 0);
   },
   
@@ -635,7 +752,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           },
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
     
@@ -1255,7 +1372,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           updatedAt: new Date(),
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
   },
@@ -1291,7 +1408,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           updatedAt: new Date(),
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
   },
@@ -1309,7 +1426,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           updatedAt: new Date(),
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
     return id;
@@ -1327,7 +1444,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           updatedAt: new Date(),
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
   },
@@ -1342,7 +1459,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           updatedAt: new Date(),
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
   },
@@ -1360,7 +1477,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           updatedAt: new Date(),
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
     return id;
@@ -1396,7 +1513,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
               updatedAt: new Date(),
             };
             
-            localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newMindmap));
+            persistMindmap(newMindmap);
             return {
               mindmap: newMindmap,
               savedMindmaps: updateSavedList(newMindmap, state.savedMindmaps),
@@ -1424,7 +1541,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           hoveredConnectionId: state.selectionState.hoveredConnectionId === id ? null : state.selectionState.hoveredConnectionId,
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
     
@@ -1448,7 +1565,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           },
         },
       };
-      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
+      persistMindmap(newState.mindmap);
       return newState;
     });
   },
@@ -1464,6 +1581,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     }
 
     set({ isAIProcessing: true, aiProgressMessage: '正在思索中...', aiProcessingNodeId: nodeId });
+    logActivity('ai_generate_start', { nodeId, nodeText: node.text });
 
     try {
       const response = await fetch(`${aiConfig.baseUrl}/v1/chat/completions`, {
@@ -1577,6 +1695,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         setTimeout(() => {
           applyLayout();
           set({ isAIProcessing: false, aiProgressMessage: '', aiProcessingNodeId: null });
+          logActivity('ai_generate_success', { nodeId, nodeText: node.text });
         }, 100);
       } else {
         set({ isAIProcessing: false, aiProgressMessage: '', aiProcessingNodeId: null });

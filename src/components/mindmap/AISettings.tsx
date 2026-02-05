@@ -1,131 +1,115 @@
-import React, { useState, useEffect } from 'react';
-import { Settings, Sparkles, Key, Globe, Cpu, Save } from 'lucide-react';
+import React from 'react';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
+import { Switch } from '@/components/ui/switch';
+import { Bot, Save, Globe, Key, Cpu } from 'lucide-react';
 import { toast } from 'sonner';
 
-const AISettings: React.FC = () => {
-  const { aiConfig, setAIConfig } = useMindmapStore();
-  const [isOpen, setIsOpen] = useState(false);
-  const [localConfig, setLocalConfig] = useState(aiConfig);
+interface AISettingsProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
 
-  // 当对话框打开时，同步全局配置到本地状态
-  useEffect(() => {
-    if (isOpen) {
-      setLocalConfig(aiConfig);
-    }
-  }, [isOpen, aiConfig]);
+const AISettings: React.FC<AISettingsProps> = ({ open, onOpenChange }) => {
+  const { aiConfig, setAIConfig } = useMindmapStore();
+  const [config, setConfig] = React.useState(aiConfig);
+
+  React.useEffect(() => {
+    setConfig(aiConfig);
+  }, [aiConfig, open]);
 
   const handleSave = () => {
-    setAIConfig(localConfig);
-    setIsOpen(false);
+    setAIConfig(config);
     toast.success('AI 配置已保存');
+    onOpenChange(false);
   };
 
   return (
-    <div className="absolute bottom-4 right-4 z-50">
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DialogTrigger asChild>
-              <Button
-                variant="outline"
-                size="icon"
-                className="w-10 h-10 rounded-full bg-background/80 backdrop-blur-md shadow-lg border-border hover:border-primary/50 transition-colors"
-              >
-                <Settings className="w-5 h-5 text-muted-foreground" />
-              </Button>
-            </DialogTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="top">AI 功能配置</TooltipContent>
-        </Tooltip>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Bot className="w-5 h-5 text-primary" />
+            AI 助手设置
+          </DialogTitle>
+          <DialogDescription>
+            配置您的 AI 模型参数。目前支持 OpenAI 兼容格式的 API（如 DeepSeek）。
+          </DialogDescription>
+        </DialogHeader>
 
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-primary" />
-              AI 功能配置
-            </DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-6 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="apiKey" className="flex items-center gap-2">
-                <Key className="w-4 h-4" />
-                DeepSeek API Key
-              </Label>
-              <Input
-                id="apiKey"
-                type="password"
-                placeholder="sk-..."
-                value={localConfig.apiKey}
-                onChange={(e) => setLocalConfig({ ...localConfig, apiKey: e.target.value })}
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                前往 <a href="https://platform.deepseek.com/" target="_blank" rel="noreferrer" className="text-primary hover:underline">DeepSeek 开放平台</a> 获取 API Key
-              </p>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="baseUrl" className="flex items-center gap-2">
-                <Globe className="w-4 h-4" />
-                API 基础路径
-              </Label>
-              <Input
-                id="baseUrl"
-                placeholder="https://api.deepseek.com"
-                value={localConfig.baseUrl}
-                onChange={(e) => setLocalConfig({ ...localConfig, baseUrl: e.target.value })}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="model" className="flex items-center gap-2">
-                <Cpu className="w-4 h-4" />
-                模型名称
-              </Label>
-              <Input
-                id="model"
-                placeholder="deepseek-chat"
-                value={localConfig.model}
-                onChange={(e) => setLocalConfig({ ...localConfig, model: e.target.value })}
-              />
-            </div>
-
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-primary/5 border border-primary/10">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <p className="text-xs text-primary/80">
-                配置完成后，选中节点会出现 AI 图标，点击图标即可呼出对话框扩展思路。
-              </p>
-            </div>
+        <div className="grid gap-4 py-4">
+          <div className="flex items-center justify-between space-x-2">
+            <Label htmlFor="ai-enabled" className="flex flex-col gap-1">
+              <span>启用 AI 功能</span>
+              <span className="font-normal text-xs text-muted-foreground">开启后可使用智能生成功能</span>
+            </Label>
+            <Switch
+              id="ai-enabled"
+              checked={config.enabled}
+              onCheckedChange={(checked) => setConfig({ ...config, enabled: checked })}
+            />
           </div>
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="ghost" onClick={() => setIsOpen(false)}>
-              取消
-            </Button>
-            <Button onClick={handleSave} className="gap-2">
-              <Save className="w-4 h-4" />
-              保存配置
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="api-key" className="flex items-center gap-2">
+              <Key className="w-3.5 h-3.5" />
+              API Key
+            </Label>
+            <Input
+              id="api-key"
+              type="password"
+              placeholder="sk-..."
+              value={config.apiKey}
+              onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="base-url" className="flex items-center gap-2">
+              <Globe className="w-3.5 h-3.5" />
+              API Base URL
+            </Label>
+            <Input
+              id="base-url"
+              placeholder="https://api.deepseek.com"
+              value={config.baseUrl}
+              onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="model" className="flex items-center gap-2">
+              <Cpu className="w-3.5 h-3.5" />
+              模型名称
+            </Label>
+            <Input
+              id="model"
+              placeholder="deepseek-chat"
+              value={config.model}
+              onChange={(e) => setConfig({ ...config, model: e.target.value })}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button onClick={handleSave} className="gap-2">
+            <Save className="w-4 h-4" />
+            保存配置
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

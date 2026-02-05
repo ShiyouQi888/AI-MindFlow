@@ -17,9 +17,9 @@ export function ThemeToggle() {
   if (!mounted) {
     return (
       <Button 
-        variant="outline" 
+        variant="ghost" 
         size="icon" 
-        className="w-10 h-10 rounded-full bg-background/80 backdrop-blur-md shadow-lg border-border opacity-0"
+        className="w-9 h-9 rounded-md opacity-0"
       >
         <span className="sr-only">切换主题</span>
       </Button>
@@ -34,10 +34,10 @@ export function ThemeToggle() {
     <Tooltip>
       <TooltipTrigger asChild>
         <Button 
-          variant="outline" 
+          variant="ghost" 
           size="icon" 
           onClick={toggleTheme}
-          className="w-10 h-10 rounded-full bg-background/80 backdrop-blur-md shadow-lg border-border hover:border-primary/50 transition-colors"
+          className="w-9 h-9 rounded-md hover:bg-accent transition-colors"
         >
           <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
           <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
