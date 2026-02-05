@@ -16,6 +16,7 @@ interface AuthState {
   fetchProfile: (userId: string) => Promise<void>;
   fetchSubscription: (userId: string) => Promise<void>;
   setInitialized: (val: boolean) => void;
+  initialize: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -26,6 +27,48 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   initialized: false,
 
   setInitialized: (val) => set({ initialized: val }),
+
+  initialize: async () => {
+    if (get().initialized) return;
+
+    if (!isSupabaseConfigured) {
+      set({ loading: false, initialized: true });
+      return;
+    }
+
+    try {
+      // Get initial session
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        set({ user: session.user });
+        await Promise.all([
+          get().fetchProfile(session.user.id),
+          get().fetchSubscription(session.user.id)
+        ]);
+      }
+
+      // Listen for auth changes
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            set({ user: session.user });
+            await Promise.all([
+              get().fetchProfile(session.user.id),
+              get().fetchSubscription(session.user.id)
+            ]);
+          }
+        } else if (event === 'SIGNED_OUT') {
+          set({ user: null, profile: null, subscription: null });
+        }
+      });
+
+    } catch (err) {
+      console.error('Auth initialization error:', err);
+    } finally {
+      set({ loading: false, initialized: true });
+    }
+  },
 
   signIn: async (email: string, password?: string) => {
     if (!isSupabaseConfigured) {

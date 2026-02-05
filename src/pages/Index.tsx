@@ -9,6 +9,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import ElectronTitleBar from '@/components/ElectronTitleBar';
 import UserMenu from '@/components/auth/UserMenu';
 import { useMindmapStore } from '@/stores/mindmapStore';
+import { useAuthStore } from '@/stores/authStore';
 import { FilePlus, Save, AlertTriangle, ChevronRight, History, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,9 +44,15 @@ const Index: React.FC = () => {
     loadMindmap,
     deleteMindmap 
   } = useMindmapStore();
+  const { initialize: initializeAuth } = useAuthStore();
   const [isNewDialogOpen, setIsNewDialogOpen] = React.useState(false);
   const [mindmapToDelete, setMindmapToDelete] = React.useState<string | null>(null);
   
+  // Initialize auth
+  useEffect(() => {
+    initializeAuth();
+  }, [initializeAuth]);
+
   // Apply initial layout
   useEffect(() => {
     applyLayout();
