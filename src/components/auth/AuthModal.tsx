@@ -23,6 +23,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
+import SliderCaptcha from './SliderCaptcha';
 
 interface AuthModalProps {
   open: boolean;
@@ -34,6 +35,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
   const [isRegisterSuccess, setIsRegisterSuccess] = useState(false);
+  const [captchaPassed, setCaptchaPassed] = useState(false);
   
   // Form states
   const [email, setEmail] = useState('');
@@ -42,6 +44,10 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!captchaPassed) {
+      toast.error('请先完成滑块验证');
+      return;
+    }
     setLoading(true);
 
     try {
@@ -66,6 +72,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
   const handleTabChange = (value: string) => {
     setActiveTab(value as any);
     setIsRegisterSuccess(false);
+    setCaptchaPassed(false);
   };
 
   const handleClose = (open: boolean) => {
@@ -74,6 +81,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
       setTimeout(() => {
         setIsRegisterSuccess(false);
         setActiveTab('login');
+        setCaptchaPassed(false);
       }, 300);
     }
   };
@@ -88,11 +96,13 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
           
           <div className="p-8 flex-1 flex flex-col">
             <div className="flex flex-col items-center text-center mb-8">
-              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shadow-lg shadow-primary/30 mb-4 rotate-3">
-                <Sparkles className="w-6 h-6 text-primary-foreground" />
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-md p-1.5">
+                  <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                </div>
+                <h2 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">AI MindFlow</h2>
               </div>
-              <h2 className="text-2xl font-bold tracking-tight">AI MindFlow</h2>
-              <p className="text-sm text-muted-foreground mt-1">记录灵感，连接思绪</p>
+              <p className="text-sm text-muted-foreground">记录灵感，连接思绪</p>
             </div>
 
             {isRegisterSuccess ? (
@@ -203,16 +213,24 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
                     </div>
                   </TabsContent>
 
-                  <Button type="submit" className="w-full h-11 mt-6 shadow-lg shadow-primary/20 group" disabled={loading}>
-                    {loading ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <>
-                        {activeTab === 'login' ? '立即登录' : '创建账户'}
-                        <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
-                      </>
-                    )}
-                  </Button>
+                  <div className="mt-6 space-y-4">
+                    <SliderCaptcha onSuccess={() => setCaptchaPassed(true)} />
+                    
+                    <Button 
+                      type="submit" 
+                      className="w-full h-11 shadow-lg shadow-primary/20 group" 
+                      disabled={loading || !captchaPassed}
+                    >
+                      {loading ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <>
+                          {activeTab === 'login' ? '立即登录' : '创建账户'}
+                          <ArrowRight className="w-4 h-4 ml-2 group-hover:translate-x-1 transition-transform" />
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </form>
               </Tabs>
             )}

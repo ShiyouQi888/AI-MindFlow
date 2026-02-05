@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useTheme } from 'next-themes';
+import { toast } from 'sonner';
 import { useMindmapStore } from '@/stores/mindmapStore';
+import { useAuthStore } from '@/stores/authStore';
 import { getNodeColor, MindNode, Position, CanvasElement, ToolType } from '@/types/mindmap';
 import { getEmbedUrl } from '@/lib/utils';
 import { Maximize, Minimize, X, RotateCcw, Play, Pause } from 'lucide-react';
@@ -58,6 +60,7 @@ const MindmapCanvas: React.FC = () => {
     organizeMindmap,
   } = useMindmapStore();
   
+  const { user, setAuthModalOpen } = useAuthStore();
   const { theme } = useTheme();
   
   const [renderTrigger, setRenderTrigger] = useState(0);
@@ -690,6 +693,11 @@ const MindmapCanvas: React.FC = () => {
         const aiX = n.position.x + n.width / 2;
         const aiY = n.position.y - n.height / 2 - 15 / viewport.zoom;
         if (Math.hypot(pos.x - aiX, pos.y - aiY) < handleSize) {
+          if (!user) {
+            toast.error('请先登录以使用 AI 功能');
+            setAuthModalOpen(true);
+            return;
+          }
           setAiInputState({
             isOpen: true,
             nodeId: id,

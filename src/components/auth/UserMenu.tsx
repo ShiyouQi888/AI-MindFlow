@@ -19,8 +19,7 @@ import AISettings from '../mindmap/AISettings';
 import UserCenter from '../mindmap/UserCenter';
 
 const UserMenu: React.FC = () => {
-  const { user, profile, subscription, signOut, loading } = useAuthStore();
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const { user, profile, subscription, signOut, loading, isAuthModalOpen, setAuthModalOpen } = useAuthStore();
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
   const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
@@ -37,12 +36,12 @@ const UserMenu: React.FC = () => {
           variant="outline" 
           size="sm" 
           className="gap-2 border-primary/20 hover:border-primary/50 bg-background/50"
-          onClick={() => setIsAuthModalOpen(true)}
+          onClick={() => setAuthModalOpen(true)}
         >
           <LogIn className="w-4 h-4" />
           登录 / 注册
         </Button>
-        <AuthModal open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen} />
+        <AuthModal open={isAuthModalOpen} onOpenChange={setAuthModalOpen} />
       </>
     );
   }
@@ -118,7 +117,7 @@ const UserMenu: React.FC = () => {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AuthModal open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen} />
+      <AuthModal open={isAuthModalOpen} onOpenChange={setAuthModalOpen} />
       <SubscriptionModal open={isSubModalOpen} onOpenChange={setIsSubModalOpen} />
       <HelpGuideModal open={isHelpModalOpen} onOpenChange={setIsHelpModalOpen} />
       <AISettings open={isAISettingsOpen} onOpenChange={setIsAISettingsOpen} />

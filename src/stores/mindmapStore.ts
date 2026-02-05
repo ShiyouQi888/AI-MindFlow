@@ -1572,6 +1572,16 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
   generateSubNodes: async (nodeId, customPrompt) => {
     const { mindmap, aiConfig, addNode, applyLayout } = get();
+    
+    // Check if user is logged in
+    // Note: This is a store, so we check state via useAuthStore.getState()
+    const { user } = (await import('./authStore')).useAuthStore.getState();
+    if (!user) {
+      toast.error('请先登录以使用 AI 功能');
+      (await import('./authStore')).useAuthStore.getState().setAuthModalOpen(true);
+      return;
+    }
+
     const node = mindmap.nodes[nodeId];
     if (!node) return;
 

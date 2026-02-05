@@ -9,7 +9,9 @@ interface AuthState {
   subscription: any | null;
   loading: boolean;
   initialized: boolean;
+  isAuthModalOpen: boolean;
   
+  setAuthModalOpen: (open: boolean) => void;
   signIn: (email: string, password?: string) => Promise<{ error: any }>;
   signUp: (email: string, password: string, username: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
@@ -25,7 +27,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   subscription: null,
   loading: true,
   initialized: false,
+  isAuthModalOpen: false,
 
+  setAuthModalOpen: (open) => set({ isAuthModalOpen: open }),
   setInitialized: (val) => set({ initialized: val }),
 
   initialize: async () => {
