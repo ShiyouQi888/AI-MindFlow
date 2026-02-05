@@ -3,6 +3,7 @@ import { useTheme } from 'next-themes';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { getNodeColor, MindNode, Position, CanvasElement } from '@/types/mindmap';
 import { parseVideoUrl, isThirdPartyVideo } from '@/utils/video';
+import ReactPlayer from 'react-player';
 import InputDialog from './InputDialog';
 import InlineAIInput from './InlineAIInput';
 
@@ -1260,7 +1261,7 @@ const MindmapCanvas: React.FC = () => {
             const videoInfo = parseVideoUrl(el.url);
             
             if (videoInfo.type !== 'direct') {
-              // Draw placeholder for third-party videos (YouTube, Bilibili)
+              // Draw placeholder for third-party videos
               ctx.fillStyle = '#000000';
               ctx.fillRect(drawX, drawY, drawW, drawH);
               
@@ -1268,7 +1269,19 @@ const MindmapCanvas: React.FC = () => {
               ctx.fillStyle = '#ffffff';
               ctx.font = 'bold 14px Inter';
               ctx.textAlign = 'center';
-              ctx.fillText(videoInfo.type === 'youtube' ? 'YouTube' : 'Bilibili', drawX + drawW / 2, drawY + drawH / 2 - 10);
+              
+              let platformName = 'Video';
+              let platformColor = '#FF0000'; // Default Red
+
+              switch(videoInfo.type) {
+                case 'youtube': platformName = 'YouTube'; platformColor = '#FF0000'; break;
+                case 'bilibili': platformName = 'Bilibili'; platformColor = '#00A1D6'; break;
+                case 'vimeo': platformName = 'Vimeo'; platformColor = '#1AB7EA'; break;
+                case 'twitch': platformName = 'Twitch'; platformColor = '#9146FF'; break;
+                default: platformName = 'Video'; platformColor = colors.primary || '#3b82f6'; break;
+              }
+
+              ctx.fillText(platformName, drawX + drawW / 2, drawY + drawH / 2 - 10);
               
               // Draw play button
               const centerX = drawX + drawW / 2;
@@ -1277,7 +1290,7 @@ const MindmapCanvas: React.FC = () => {
               
               ctx.beginPath();
               ctx.arc(centerX, centerY + 15, radius, 0, Math.PI * 2);
-              ctx.fillStyle = videoInfo.type === 'youtube' ? '#FF0000' : '#00A1D6';
+              ctx.fillStyle = platformColor;
               ctx.fill();
               
               ctx.beginPath();
@@ -1591,11 +1604,10 @@ const MindmapCanvas: React.FC = () => {
         </div>
       )}
 
-      {/* Third Party Video Players */}
+      {/* Video Players (Direct and Third Party) */}
       {Object.values(elements).map((el) => {
         if (el.type !== 'video' || !el.url) return null;
         const videoInfo = parseVideoUrl(el.url);
-        if (videoInfo.type === 'direct') return null;
 
         const vidWidth = el.width || 160;
         const vidHeight = el.height || 90;
@@ -1632,15 +1644,40 @@ const MindmapCanvas: React.FC = () => {
             }}
           >
             <div className="relative w-full h-full group">
-              <iframe
-                src={videoInfo.embedUrl!}
-                className="w-full h-full border-0 rounded-md shadow-lg pointer-events-auto"
-                style={{
-                  pointerEvents: (dragState.isDragging || canvasState.isPanning) ? 'none' : 'auto',
-                }}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-              />
+              {videoInfo.type === 'bilibili' ? (
+                <iframe
+                  src={videoInfo.embedUrl!}
+                  className="w-full h-full border-0 rounded-md shadow-lg pointer-events-auto"
+                  style={{
+                    pointerEvents: (dragState.isDragging || canvasState.isPanning) ? 'none' : 'auto',
+                  }}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <div 
+                  className="w-full h-full rounded-md shadow-lg overflow-hidden pointer-events-auto bg-black"
+                  style={{
+                    pointerEvents: (dragState.isDragging || canvasState.isPanning) ? 'none' : 'auto',
+                  }}
+                >
+                  <ReactPlayer
+                    url={el.url}
+                    width="100%"
+                    height="100%"
+                    controls={true}
+                    playing={false}
+                    light={false} // Can set to true for a preview image first
+                    pip={true}
+                    stopOnUnmount={false}
+                    config={{
+                      youtube: {
+                        playerVars: { showinfo: 1 }
+                      }
+                    }}
+                  />
+                </div>
+              )}
               
               {/* Controls Overlay - Visible on Hover or Selection */}
               {(isSelected || isHovered) && !dragState.isDragging && !canvasState.isPanning && (
