@@ -2,8 +2,7 @@ import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { useTheme } from 'next-themes';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { getNodeColor, MindNode, Position, CanvasElement } from '@/types/mindmap';
-import { parseVideoUrl, isThirdPartyVideo } from '@/utils/video';
-import ReactPlayer from 'react-player';
+import { getEmbedUrl } from '@/lib/utils';
 import InputDialog from './InputDialog';
 import InlineAIInput from './InlineAIInput';
 
@@ -139,12 +138,30 @@ const MindmapCanvas: React.FC = () => {
    });
 
    const [aiInputState, setAiInputState] = useState<{
-     isOpen: boolean;
-     nodeId: string | null;
-   }>({
-     isOpen: false,
-     nodeId: null,
-   });
+    isOpen: boolean;
+    nodeId: string | null;
+  }>({
+    isOpen: false,
+    nodeId: null,
+  });
+
+  // Track activated third-party videos
+  const [activatedVideos, setActivatedVideos] = useState<Record<string, boolean>>({});
+
+  // Reset activated videos when selection changes
+  useEffect(() => {
+    setActivatedVideos(prev => {
+      const next = { ...prev };
+      let changed = false;
+      Object.keys(next).forEach(id => {
+        if (!selectionState.selectedElementIds.includes(id)) {
+          delete next[id];
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [selectionState.selectedElementIds]);
 
   const lastSubmittedElementId = useRef<string | null>(null);
   
@@ -262,18 +279,11 @@ const MindmapCanvas: React.FC = () => {
 
     for (const el of elementList) {
       if (el.type === 'rect' || el.type === 'image' || el.type === 'video') {
-        const w = el.width || 0;
-        const h = el.height || 0;
-        const x = w < 0 ? el.position.x + w : el.position.x;
-        const y = h < 0 ? el.position.y + h : el.position.y;
-        const absW = Math.abs(w);
-        const absH = Math.abs(h);
-
         if (
-          pos.x >= x &&
-          pos.x <= x + absW &&
-          pos.y >= y &&
-          pos.y <= y + absH
+          pos.x >= el.position.x &&
+          pos.x <= el.position.x + (el.width || 0) &&
+          pos.y >= el.position.y &&
+          pos.y <= el.position.y + (el.height || 0)
         ) {
           return el.id;
         }
@@ -320,24 +330,21 @@ const MindmapCanvas: React.FC = () => {
       const el = elements[id];
       if (!el || el.type === 'text' || el.type === 'curve' || el.type === 'polyline') continue;
 
+      const x = el.position.x;
+      const y = el.position.y;
       const w = el.width || 0;
       const h = el.height || 0;
-      const x = w < 0 ? el.position.x + w : el.position.x;
-      const y = h < 0 ? el.position.y + h : el.position.y;
-      const absW = Math.abs(w);
-      const absH = Math.abs(h);
       const handleSize = 8 / viewport.zoom;
-      const padding = 2 / viewport.zoom;
 
       const handles = [
-        { name: 'nw', x: x - padding, y: y - padding },
-        { name: 'n', x: x + absW / 2, y: y - padding },
-        { name: 'ne', x: x + absW + padding, y: y - padding },
-        { name: 'w', x: x - padding, y: y + absH / 2 },
-        { name: 'e', x: x + absW + padding, y: y + absH / 2 },
-        { name: 'sw', x: x - padding, y: y + absH + padding },
-        { name: 's', x: x + absW / 2, y: y + absH + padding },
-        { name: 'se', x: x + absW + padding, y: y + absH + padding },
+        { name: 'nw', x: x, y: y },
+        { name: 'n', x: x + w / 2, y: y },
+        { name: 'ne', x: x + w, y: y },
+        { name: 'w', x: x, y: y + h / 2 },
+        { name: 'e', x: x + w, y: y + h / 2 },
+        { name: 'sw', x: x, y: y + h },
+        { name: 's', x: x + w / 2, y: y + h },
+        { name: 'se', x: x + w, y: y + h },
       ];
 
       for (const handle of handles) {
@@ -384,15 +391,8 @@ const MindmapCanvas: React.FC = () => {
         hX = el.position.x + width + 10 / viewport.zoom;
         hY = el.position.y - fontSize / 2;
       } else {
-        const w = el.width || 0;
-        const h = el.height || 0;
-        const x = w < 0 ? el.position.x + w : el.position.x;
-        const y = h < 0 ? el.position.y + h : el.position.y;
-        const absW = Math.abs(w);
-        const absH = Math.abs(h);
-        
-        hX = x + absW + 10 / viewport.zoom;
-        hY = y + absH / 2;
+        hX = el.position.x + (el.width || 0) + 10 / viewport.zoom;
+        hY = el.position.y + (el.height || 0) / 2;
       }
 
       if (Math.hypot(pos.x - hX, pos.y - hY) < handleSize) {
@@ -734,14 +734,7 @@ const MindmapCanvas: React.FC = () => {
       updateElement(inputDialog.elementId, { text: value });
     } else if (inputDialog.type === 'image' || inputDialog.type === 'video') {
       if (value) {
-        const updates: any = { url: value };
-        const el = elements[inputDialog.elementId];
-        // If element is very small (default 0 or small drag), give it a decent default size
-        if (el && (!el.width || !el.height || (Math.abs(el.width) < 10 && Math.abs(el.height) < 10))) {
-          updates.width = inputDialog.type === 'video' ? 480 : 200;
-          updates.height = inputDialog.type === 'video' ? 270 : 200;
-        }
-        updateElement(inputDialog.elementId, updates);
+        updateElement(inputDialog.elementId, { url: value });
       } else {
         deleteElement(inputDialog.elementId);
       }
@@ -945,15 +938,8 @@ const MindmapCanvas: React.FC = () => {
           sX = source.position.x + width + 10 / viewport.zoom;
           sY = source.position.y - fontSize / 2;
         } else {
-          const sWidth = source.width || 0;
-          const sHeight = source.height || 0;
-          const sDrawX = sWidth < 0 ? source.position.x + sWidth : source.position.x;
-          const sDrawY = sHeight < 0 ? source.position.y + sHeight : source.position.y;
-          const sDrawW = Math.abs(sWidth);
-          const sDrawH = Math.abs(sHeight);
-          
-          sX = sDrawX + sDrawW + 10 / viewport.zoom;
-          sY = sDrawY + sDrawH / 2;
+          sX = source.position.x + (source.width || 0) + 10 / viewport.zoom;
+          sY = source.position.y + (source.height || 0) / 2;
         }
       }
 
@@ -968,15 +954,8 @@ const MindmapCanvas: React.FC = () => {
           tX = target.position.x + width / 2;
           tY = target.position.y - fontSize / 2;
         } else {
-          const tWidth = target.width || 0;
-          const tHeight = target.height || 0;
-          const tDrawX = tWidth < 0 ? target.position.x + tWidth : target.position.x;
-          const tDrawY = tHeight < 0 ? target.position.y + tHeight : target.position.y;
-          const tDrawW = Math.abs(tWidth);
-          const tDrawH = Math.abs(tHeight);
-          
-          tX = tDrawX + tDrawW / 2;
-          tY = tDrawY + tDrawH / 2;
+          tX = target.position.x + (target.width || 0) / 2;
+          tY = target.position.y + (target.height || 0) / 2;
         }
       }
 
@@ -1282,127 +1261,97 @@ const MindmapCanvas: React.FC = () => {
           const drawH = Math.abs(vidHeight);
           
           if (el.url) {
-            const videoInfo = parseVideoUrl(el.url);
-            
-            if (videoInfo.type !== 'direct') {
-              // Draw placeholder for third-party videos
-              ctx.fillStyle = '#000000';
+            const { type: videoType } = getEmbedUrl(el.url);
+            if (videoType === 'embed') {
+              // Draw placeholder for embedded videos on canvas
+              ctx.fillStyle = theme === 'dark' ? '#1f2937' : '#f3f4f6';
               ctx.fillRect(drawX, drawY, drawW, drawH);
+              ctx.strokeStyle = theme === 'dark' ? '#374151' : '#e5e7eb';
+              ctx.strokeRect(drawX, drawY, drawW, drawH);
               
-              // Draw platform icon/text
-              ctx.fillStyle = '#ffffff';
-              ctx.font = 'bold 14px Inter';
+              ctx.fillStyle = theme === 'dark' ? '#9ca3af' : '#6b7280';
+              ctx.font = `${14 / viewport.zoom}px sans-serif`;
               ctx.textAlign = 'center';
-              
-              let platformName = 'Video';
-              let platformColor = '#FF0000'; // Default Red
+              ctx.fillText('第三方播放器', drawX + drawW / 2, drawY + drawH / 2);
+              ctx.textAlign = 'left'; // Reset
+              break;
+            }
 
-              switch(videoInfo.type) {
-                case 'youtube': platformName = 'YouTube'; platformColor = '#FF0000'; break;
-                case 'bilibili': platformName = 'Bilibili'; platformColor = '#00A1D6'; break;
-                case 'vimeo': platformName = 'Vimeo'; platformColor = '#1AB7EA'; break;
-                case 'twitch': platformName = 'Twitch'; platformColor = '#9146FF'; break;
-                default: platformName = 'Video'; platformColor = colors.primary || '#3b82f6'; break;
-              }
-
-              ctx.fillText(platformName, drawX + drawW / 2, drawY + drawH / 2 - 10);
+            let video = videoCache.current[el.url];
+            if (!video) {
+              video = document.createElement('video');
+              video.src = el.url;
+              video.muted = true;
+              video.loop = true;
+              video.playsInline = true;
+              video.crossOrigin = 'anonymous';
+              video.preload = 'auto';
               
-              // Draw play button
-              const centerX = drawX + drawW / 2;
-              const centerY = drawY + drawH / 2;
-              const radius = Math.min(drawW, drawH) * 0.15;
+              video.onloadeddata = () => {
+                videoCache.current[el.url!] = video!;
+                if (!storedWidth || !storedHeight || Math.abs(storedWidth) < 2 || Math.abs(storedHeight) < 2) {
+                  const maxWidth = 400;
+                  const ratio = video!.videoHeight / video!.videoWidth;
+                  const width = Math.min(maxWidth, video!.videoWidth);
+                  const height = width * ratio;
+                  updateElement(el.id, { width, height });
+                }
+                forceRender();
+              };
               
-              ctx.beginPath();
-              ctx.arc(centerX, centerY + 15, radius, 0, Math.PI * 2);
-              ctx.fillStyle = platformColor;
-              ctx.fill();
-              
-              ctx.beginPath();
-              const triSize = radius * 0.5;
-              ctx.moveTo(centerX - triSize * 0.4, centerY + 15 - triSize);
-              ctx.lineTo(centerX + triSize * 0.8, centerY + 15);
-              ctx.lineTo(centerX - triSize * 0.4, centerY + 15 + triSize);
-              ctx.closePath();
-              ctx.fillStyle = '#ffffff';
-              ctx.fill();
-            } else {
-              // Existing direct video rendering logic
-              let video = videoCache.current[el.url];
-              if (!video) {
-                video = document.createElement('video');
-                video.src = el.url;
-                video.muted = true;
-                video.loop = true;
-                video.playsInline = true;
-                video.crossOrigin = 'anonymous';
-                video.preload = 'auto';
-                
-                video.onloadeddata = () => {
-                  videoCache.current[el.url!] = video!;
-                  if (!storedWidth || !storedHeight || Math.abs(storedWidth) < 2 || Math.abs(storedHeight) < 2) {
-                    const maxWidth = 400;
-                    const ratio = video!.videoHeight / video!.videoWidth;
-                    const width = Math.min(maxWidth, video!.videoWidth);
-                    const height = width * ratio;
-                    updateElement(el.id, { width, height });
-                  }
-                  forceRender();
-                };
-                
-                video.onerror = () => {
-                  ctx.strokeStyle = '#ef4444';
-                  ctx.strokeRect(drawX, drawY, drawW, drawH);
-                  ctx.fillStyle = '#ef4444';
-                  ctx.fillText('视频加载失败', drawX + 5, drawY + 15);
-                };
-                
-                videoCache.current[el.url] = video;
-                video.load();
-              }
-
-              if (video.readyState >= 2) { // HAVE_CURRENT_DATA
-                 ctx.drawImage(video, drawX, drawY, drawW, drawH);
-                 
-                 // Draw play/pause button overlay if not playing or if hovered
-                 if (video.paused || isHovered || isSelected) {
-                   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                   ctx.fillRect(drawX, drawY, drawW, drawH);
-                   
-                   const centerX = drawX + drawW / 2;
-                   const centerY = drawY + drawH / 2;
-                   const radius = Math.min(drawW, drawH) * 0.2;
-                   
-                   ctx.beginPath();
-                   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-                   ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                   ctx.fill();
-                   
-                   if (video.paused) {
-                     // Draw Play triangle
-                     ctx.beginPath();
-                     const triSize = radius * 0.5;
-                     ctx.moveTo(centerX - triSize * 0.4, centerY - triSize);
-                     ctx.lineTo(centerX + triSize * 0.8, centerY);
-                     ctx.lineTo(centerX - triSize * 0.4, centerY + triSize);
-                     ctx.closePath();
-                     ctx.fillStyle = '#000000';
-                     ctx.fill();
-                   } else {
-                     // Draw Pause bars
-                     const barW = radius * 0.2;
-                     const barH = radius * 0.8;
-                     ctx.fillStyle = '#000000';
-                     ctx.fillRect(centerX - barW * 1.5, centerY - barH / 2, barW, barH);
-                     ctx.fillRect(centerX + barW * 0.5, centerY - barH / 2, barW, barH);
-                   }
-                 }
-               } else {
-                ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
+              video.onerror = () => {
+                ctx.strokeStyle = '#ef4444';
                 ctx.strokeRect(drawX, drawY, drawW, drawH);
-                ctx.fillStyle = el.style.stroke || colors.primary || '#3b82f6';
-                ctx.font = '12px Inter';
-                ctx.fillText('正在加载视频...', drawX + 5, drawY + 15);
-              }
+                ctx.fillStyle = '#ef4444';
+                ctx.fillText('视频加载失败', drawX + 5, drawY + 15);
+              };
+              
+              videoCache.current[el.url] = video;
+              video.load();
+            }
+
+            if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+               ctx.drawImage(video, drawX, drawY, drawW, drawH);
+               
+               // Draw play/pause button overlay if not playing or if hovered
+               if (video.paused || isHovered || isSelected) {
+                 ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                 ctx.fillRect(drawX, drawY, drawW, drawH);
+                 
+                 const centerX = drawX + drawW / 2;
+                 const centerY = drawY + drawH / 2;
+                 const radius = Math.min(drawW, drawH) * 0.2;
+                 
+                 ctx.beginPath();
+                 ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                 ctx.fill();
+                 
+                 if (video.paused) {
+                   // Draw Play triangle
+                   ctx.beginPath();
+                   const triSize = radius * 0.5;
+                   ctx.moveTo(centerX - triSize * 0.4, centerY - triSize);
+                   ctx.lineTo(centerX + triSize * 0.8, centerY);
+                   ctx.lineTo(centerX - triSize * 0.4, centerY + triSize);
+                   ctx.closePath();
+                   ctx.fillStyle = '#000000';
+                   ctx.fill();
+                 } else {
+                   // Draw Pause bars
+                   const barW = radius * 0.2;
+                   const barH = radius * 0.8;
+                   ctx.fillStyle = '#000000';
+                   ctx.fillRect(centerX - barW * 1.5, centerY - barH / 2, barW, barH);
+                   ctx.fillRect(centerX + barW * 0.5, centerY - barH / 2, barW, barH);
+                 }
+               }
+             } else {
+              ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
+              ctx.strokeRect(drawX, drawY, drawW, drawH);
+              ctx.fillStyle = el.style.stroke || colors.primary || '#3b82f6';
+              ctx.font = '12px Inter';
+              ctx.fillText('正在加载视频...', drawX + 5, drawY + 15);
             }
           } else {
             ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
@@ -1421,15 +1370,13 @@ const MindmapCanvas: React.FC = () => {
         ctx.lineWidth = 1;
         ctx.setLineDash([5, 5]);
         
+        const x = el.position.x;
+        const y = el.position.y;
         const w = el.width || 0;
         const h = el.height || 0;
-        const x = w < 0 ? el.position.x + w : el.position.x;
-        const y = h < 0 ? el.position.y + h : el.position.y;
-        const absW = Math.abs(w);
-        const absH = Math.abs(h);
   
         if (el.type === 'rect' || el.type === 'circle' || el.type === 'image' || el.type === 'video') {
-          ctx.strokeRect(x - 2, y - 2, absW + 4, absH + 4);
+          ctx.strokeRect(x - 2, y - 2, w + 4, h + 4);
           
           // Draw handles
           ctx.setLineDash([]);
@@ -1438,16 +1385,15 @@ const MindmapCanvas: React.FC = () => {
           ctx.lineWidth = 2;
           const handleSize = 6 / viewport.zoom;
 
-          const padding = 2 / viewport.zoom;
           const handles = [
-            { x: x - padding, y: y - padding },
-            { x: x + absW / 2, y: y - padding },
-            { x: x + absW + padding, y: y - padding },
-            { x: x - padding, y: y + absH / 2 },
-            { x: x + absW + padding, y: y + absH / 2 },
-            { x: x - padding, y: y + absH + padding },
-            { x: x + absW / 2, y: y + absH + padding },
-            { x: x + absW + padding, y: y + absH + padding },
+            { x: x, y: y },
+            { x: x + w / 2, y: y },
+            { x: x + w, y: y },
+            { x: x, y: y + h / 2 },
+            { x: x + w, y: y + h / 2 },
+            { x: x, y: y + h },
+            { x: x + w / 2, y: y + h },
+            { x: x + w, y: y + h },
           ];
 
           handles.forEach(h => {
@@ -1468,15 +1414,8 @@ const MindmapCanvas: React.FC = () => {
           hX = el.position.x + width + 10 / viewport.zoom;
           hY = el.position.y - fontSize / 2;
         } else {
-          const w = el.width || 0;
-        const h = el.height || 0;
-        const x = w < 0 ? el.position.x + w : el.position.x;
-        const y = h < 0 ? el.position.y + h : el.position.y;
-        const absW = Math.abs(w);
-        const absH = Math.abs(h);
-        
-        hX = x + absW + 10 / viewport.zoom;
-        hY = y + absH / 2;
+          hX = el.position.x + (el.width || 0) + 10 / viewport.zoom;
+          hY = el.position.y + (el.height || 0) / 2;
         }
         
         ctx.beginPath();
@@ -1631,133 +1570,6 @@ const MindmapCanvas: React.FC = () => {
         </div>
       )}
 
-      {/* Video Players (Direct and Third Party) */}
-      {Object.values(elements).map((el) => {
-        if (el.type !== 'video' || !el.url) return null;
-        const videoInfo = parseVideoUrl(el.url);
-
-        const vidWidth = el.width || 160;
-        const vidHeight = el.height || 90;
-        
-        const drawX = vidWidth < 0 ? el.position.x + vidWidth : el.position.x;
-        const drawY = vidHeight < 0 ? el.position.y + vidHeight : el.position.y;
-        const drawW = Math.abs(vidWidth);
-        const drawH = Math.abs(vidHeight);
-
-        const x = drawX * viewport.zoom + viewport.x;
-        const y = drawY * viewport.zoom + viewport.y;
-        const width = drawW * viewport.zoom;
-        const height = drawH * viewport.zoom;
-
-        // Simple check to avoid rendering if too small
-        if (width < 20 || height < 20) return null;
-
-        const isSelected = selectionState.selectedElementIds.includes(el.id);
-        const isHovered = selectionState.hoveredElementId === el.id;
-
-        return (
-          <div
-            key={el.id}
-            className="absolute z-[10]"
-            style={{
-              left: x,
-              top: y,
-              width: width,
-              height: height,
-              // Reduced opacity during dragging/panning
-              opacity: (dragState.isDragging || canvasState.isPanning) ? 0.3 : 1,
-              // When selected, we want to allow clicking handles on the canvas
-              pointerEvents: 'none',
-            }}
-          >
-            <div className="relative w-full h-full group">
-              {videoInfo.type === 'bilibili' ? (
-                <iframe
-                  src={videoInfo.embedUrl!}
-                  className="w-full h-full border-0 rounded-md shadow-lg pointer-events-auto"
-                  style={{
-                    pointerEvents: (dragState.isDragging || canvasState.isPanning) ? 'none' : 'auto',
-                  }}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              ) : (
-                <div 
-                  className="w-full h-full rounded-md shadow-lg overflow-hidden pointer-events-auto bg-black"
-                  style={{
-                    pointerEvents: (dragState.isDragging || canvasState.isPanning) ? 'none' : 'auto',
-                  }}
-                >
-                  <ReactPlayer
-                    url={el.url}
-                    width="100%"
-                    height="100%"
-                    controls={true}
-                    playing={false}
-                    light={false}
-                    pip={false} // Disable PiP by default to prevent Metadata error
-                    stopOnUnmount={false}
-                    config={{
-                      youtube: {
-                        playerVars: { 
-                          showinfo: 0,
-                          rel: 0,
-                          modestbranding: 1
-                        }
-                      },
-                      file: {
-                        attributes: {
-                          controlsList: 'nodownload'
-                        }
-                      }
-                    }}
-                  />
-                </div>
-              )}
-              
-              {/* Controls Overlay - Visible on Hover or Selection */}
-              {(isSelected || isHovered) && !dragState.isDragging && !canvasState.isPanning && (
-                <div className="absolute top-2 right-2 flex gap-2 pointer-events-auto z-20">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      updateElement(el.id, { url: '' }); // Trigger refresh or clear
-                      setTimeout(() => updateElement(el.id, { url: el.url }), 50);
-                    }}
-                    className="p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-md backdrop-blur-sm transition-colors"
-                    title="刷新视频"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteElement(el.id);
-                    }}
-                    className="p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-md backdrop-blur-sm transition-colors"
-                    title="删除视频"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                  </button>
-                </div>
-              )}
-
-              {/* Interaction Block Overlay - Visible when NOT selected/hovered */}
-              {!isSelected && !isHovered && (
-                <div 
-                  className="absolute inset-0 pointer-events-auto cursor-default z-10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    selectElement(el.id);
-                  }}
-                  onMouseEnter={() => setHoveredElement(el.id)}
-                />
-              )}
-            </div>
-          </div>
-        );
-      })}
-
       <InputDialog
         isOpen={inputDialog.isOpen}
         onClose={handleInputDialogClose}
@@ -1775,7 +1587,7 @@ const MindmapCanvas: React.FC = () => {
           inputDialog.type === 'text' 
             ? '请输入文字内容' 
             : inputDialog.type === 'video'
-              ? '支持 YouTube, Bilibili 或直接视频链接'
+              ? 'https://example.com/video.mp4'
               : 'https://example.com/image.png'
         }
       />
@@ -1803,6 +1615,83 @@ const MindmapCanvas: React.FC = () => {
           <span className="text-sm font-medium">{aiProgressMessage}</span>
         </div>
       )}
+
+      {/* Third-party Video Overlays */}
+      <div 
+        className="absolute inset-0 pointer-events-none overflow-hidden"
+        style={{ zIndex: 5 }}
+      >
+        {Object.values(elements).map(el => {
+          if (el.type !== 'video' || !el.url) return null;
+          const { url: embedUrl, type: videoType } = getEmbedUrl(el.url);
+          if (videoType !== 'embed') return null;
+
+          const x = (el.position.x * viewport.zoom) + viewport.x;
+          const y = (el.position.y * viewport.zoom) + viewport.y;
+          const w = (el.width || 0) * viewport.zoom;
+          const h = (el.height || 0) * viewport.zoom;
+
+          // Check if it's within viewport (rough check)
+          const margin = 500;
+          const containerWidth = containerRef.current?.clientWidth || window.innerWidth;
+          const containerHeight = containerRef.current?.clientHeight || window.innerHeight;
+          if (x + w < -margin || x > containerWidth + margin || y + h < -margin || y > containerHeight + margin) {
+            return null;
+          }
+
+          const isSelected = selectionState.selectedElementIds.includes(el.id);
+          const isDragging = dragState.isDragging && dragState.id === el.id && dragState.type === 'element';
+          const isResizing = dragState.isDragging && dragState.id === el.id && dragState.type === 'resize';
+          const isActivated = activatedVideos[el.id];
+
+          return (
+            <div
+              key={el.id}
+              className="absolute pointer-events-auto overflow-hidden bg-black group"
+              style={{
+                left: x,
+                top: y,
+                width: Math.abs(w),
+                height: Math.abs(h),
+                transform: `scaleX(${w < 0 ? -1 : 1}) scaleY(${h < 0 ? -1 : 1})`,
+                boxShadow: isSelected ? '0 0 0 2px #3b82f6' : 'none',
+                opacity: (isDragging || isResizing) ? 0.5 : 1,
+                // Disable pointer events during drag/resize OR if not activated
+                pointerEvents: (isDragging || isResizing || !isActivated) ? 'none' : 'auto',
+              }}
+            >
+              <iframe
+                src={embedUrl}
+                className="w-full h-full border-none"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+              
+              {/* Activation Overlay */}
+              {!isActivated && (
+                <div 
+                  className="absolute inset-0 bg-black/40 flex items-center justify-center cursor-pointer pointer-events-auto"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (isSelected) {
+                      setActivatedVideos(prev => ({ ...prev, [el.id]: true }));
+                    } else {
+                      selectElement(el.id);
+                    }
+                  }}
+                >
+                  <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform">
+                    <div className="w-0 h-0 border-t-[10px] border-t-transparent border-l-[18px] border-l-black border-b-[10px] border-b-transparent ml-1" />
+                  </div>
+                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                    {isSelected ? '点击开始播放' : '点击选中'}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };
