@@ -105,8 +105,10 @@ export interface FreeConnection {
   id: string;
   sourceId: string;
   sourceType: 'node' | 'element';
+  sourceHandle?: string;
   targetId: string;
   targetType: 'node' | 'element';
+  targetHandle?: string;
   style: {
     stroke?: string;
     strokeWidth?: number;
@@ -149,8 +151,10 @@ export interface DragState {
 export interface SelectionState {
   selectedNodeIds: string[];
   selectedElementIds: string[];
+  selectedConnectionIds: string[];
   hoveredNodeId: string | null;
   hoveredElementId: string | null;
+  hoveredConnectionId: string | null;
 }
 
 export interface CanvasState {

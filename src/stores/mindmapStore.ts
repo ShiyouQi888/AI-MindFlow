@@ -63,9 +63,11 @@ interface MindmapStore {
   // Selection
   selectNode: (nodeId: string, addToSelection?: boolean) => void;
   selectElement: (elementId: string, addToSelection?: boolean) => void;
+  selectConnection: (connectionId: string, addToSelection?: boolean) => void;
   clearSelection: () => void;
   setHoveredNode: (nodeId: string | null) => void;
   setHoveredElement: (elementId: string | null) => void;
+  setHoveredConnection: (connectionId: string | null) => void;
   
   // Editing
   setEditingNode: (nodeId: string | null) => void;
@@ -154,6 +156,7 @@ const createInitialMindmap = (): MindMap => {
         level: 1,
         width: calculateNodeWidth('分支一', 1),
         height: 36,
+        side: 'right',
       },
       [child2Id]: {
         id: child2Id,
@@ -165,6 +168,7 @@ const createInitialMindmap = (): MindMap => {
         level: 1,
         width: calculateNodeWidth('分支二', 1),
         height: 36,
+        side: 'right',
       },
       [child3Id]: {
         id: child3Id,
@@ -176,6 +180,7 @@ const createInitialMindmap = (): MindMap => {
         level: 1,
         width: calculateNodeWidth('分支三', 1),
         height: 36,
+        side: 'right',
       },
       [grandchild1Id]: {
         id: grandchild1Id,
@@ -187,6 +192,7 @@ const createInitialMindmap = (): MindMap => {
         level: 2,
         width: calculateNodeWidth('子节点 A', 2),
         height: 36,
+        side: 'right',
       },
       [grandchild2Id]: {
         id: grandchild2Id,
@@ -198,6 +204,7 @@ const createInitialMindmap = (): MindMap => {
         level: 2,
         width: calculateNodeWidth('子节点 B', 2),
         height: 36,
+        side: 'right',
       },
     },
     elements: {},
@@ -268,8 +275,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     selectionState: {
       selectedNodeIds: [],
       selectedElementIds: [],
+      selectedConnectionIds: [],
       hoveredNodeId: null,
       hoveredElementId: null,
+      hoveredConnectionId: null,
     },
     canvasState: {
       isPanning: false,
@@ -318,8 +327,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           selectionState: {
             selectedNodeIds: [],
             selectedElementIds: [],
+            selectedConnectionIds: [],
             hoveredNodeId: null,
             hoveredElementId: null,
+            hoveredConnectionId: null,
           },
           editingNodeId: null,
           editingElementId: null,
@@ -368,11 +379,36 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           // 'both' direction: distribute evenly, prefer right side first
           const leftCount = parent.children.filter(id => get().mindmap.nodes[id]?.side === 'left').length;
           const rightCount = parent.children.filter(id => get().mindmap.nodes[id]?.side === 'right').length;
+          
+          // If we're adding a sibling (Enter key), we might want to stay on the same side
+          // but addNode doesn't know which node was selected. 
+          // However, if the user didn't provide explicitSide, we balance.
           side = rightCount <= leftCount ? 'right' : 'left';
         }
       } else {
         // Non-root nodes inherit side from parent
         side = parent.side;
+        
+        // If parent's side is missing, try to infer it from parent's position relative to root
+        if (!side) {
+          const root = get().mindmap.nodes[get().mindmap.rootId];
+          if (root) {
+            side = parent.position.x < root.position.x ? 'left' : 'right';
+          }
+        }
+      }
+    }
+
+    // Ensure side is never undefined for children of root or deeper
+    if (!side && parent) {
+      const root = get().mindmap.nodes[get().mindmap.rootId];
+      if (root) {
+        // For direct children of root, use balancing or direction
+        if (parent.id === root.id) {
+           // This part is already handled above in the if (!side) { if (parent.parentId === null) ... } block
+        } else {
+           // Should have been handled by inheritance above
+        }
       }
     }
 
@@ -491,8 +527,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         selectionState: {
           selectedNodeIds: [],
           selectedElementIds: [],
+          selectedConnectionIds: [],
           hoveredNodeId: null,
           hoveredElementId: null,
+          hoveredConnectionId: null,
         },
         editingNodeId: null,
         editingElementId: null,
@@ -552,11 +590,21 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     // Delete all descendants
     toDelete.forEach((id) => delete newNodes[id]);
     
+    // Also delete any free connections that involve these nodes
+    const newConnections = { ...mindmap.connections };
+    Object.keys(newConnections).forEach(connId => {
+      const conn = newConnections[connId];
+      if (toDelete.has(conn.sourceId) || toDelete.has(conn.targetId)) {
+        delete newConnections[connId];
+      }
+    });
+    
     set((state) => {
       const newState = {
         mindmap: {
           ...state.mindmap,
           nodes: newNodes,
+          connections: newConnections,
           updatedAt: new Date(),
         },
         selectionState: {
@@ -597,6 +645,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       selectionState: {
         ...state.selectionState,
         selectedElementIds: addToSelection ? state.selectionState.selectedElementIds : [],
+        selectedConnectionIds: addToSelection ? state.selectionState.selectedConnectionIds : [],
         selectedNodeIds: addToSelection 
           ? [...state.selectionState.selectedNodeIds, nodeId]
           : [nodeId],
@@ -609,9 +658,23 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       selectionState: {
         ...state.selectionState,
         selectedNodeIds: addToSelection ? state.selectionState.selectedNodeIds : [],
+        selectedConnectionIds: addToSelection ? state.selectionState.selectedConnectionIds : [],
         selectedElementIds: addToSelection 
           ? [...state.selectionState.selectedElementIds, elementId]
           : [elementId],
+      },
+    }));
+  },
+
+  selectConnection: (connectionId, addToSelection = false) => {
+    set((state) => ({
+      selectionState: {
+        ...state.selectionState,
+        selectedNodeIds: addToSelection ? state.selectionState.selectedNodeIds : [],
+        selectedElementIds: addToSelection ? state.selectionState.selectedElementIds : [],
+        selectedConnectionIds: addToSelection 
+          ? [...state.selectionState.selectedConnectionIds, connectionId]
+          : [connectionId],
       },
     }));
   },
@@ -622,6 +685,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         ...state.selectionState,
         selectedNodeIds: [],
         selectedElementIds: [],
+        selectedConnectionIds: [],
       },
     }));
   },
@@ -640,6 +704,15 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       selectionState: {
         ...state.selectionState,
         hoveredElementId: elementId,
+      },
+    }));
+  },
+
+  setHoveredConnection: (connectionId) => {
+    set((state) => ({
+      selectionState: {
+        ...state.selectionState,
+        hoveredConnectionId: connectionId,
       },
     }));
   },
@@ -878,28 +951,38 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     const node = mindmap.nodes[nodeId];
     if (!node) return;
 
-    const targetZoom = 1.2;
+    // Use a target zoom that is at least the current zoom if it's already reasonably high,
+    // otherwise zoom in to a comfortable reading level (1.1)
+    const currentZoom = mindmap.viewport.zoom;
+    const targetZoom = Math.max(currentZoom, 1.1);
+    
     const targetVx = canvasWidth / 2 - node.position.x * targetZoom;
     const targetVy = canvasHeight / 2 - node.position.y * targetZoom;
 
     // Simple animation loop
     const startVx = mindmap.viewport.x;
     const startVy = mindmap.viewport.y;
-    const startZoom = mindmap.viewport.zoom;
+    const startZoom = currentZoom;
     
-    const duration = 300; // ms
+    // Adjust duration based on the "distance" of the zoom jump
+    const zoomDelta = Math.abs(targetZoom - startZoom);
+    const duration = zoomDelta > 0.5 ? 600 : 400; 
+    
     const startTime = performance.now();
 
+    // Cancel any existing focus animation if possible (using a simple flag on state)
+    // For now, we just ensure the animation is smooth.
+    
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
       
-      // Easing function: easeOutCubic
-      const ease = 1 - Math.pow(1 - progress, 3);
+      // Easing function: easeOutQuart for smoother finish
+      const ease = 1 - Math.pow(1 - progress, 4);
 
       const currentVx = startVx + (targetVx - startVx) * ease;
       const currentVy = startVy + (targetVy - startVy) * ease;
-      const currentZoom = startZoom + (targetZoom - startZoom) * ease;
+      const zoom = startZoom + (targetZoom - startZoom) * ease;
 
       set((state) => ({
         mindmap: {
@@ -907,7 +990,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           viewport: {
             x: currentVx,
             y: currentVy,
-            zoom: currentZoom,
+            zoom,
           },
         },
       }));
@@ -986,8 +1069,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         ...state.selectionState,
         selectedNodeIds: [],
         selectedElementIds: [],
+        selectedConnectionIds: [],
         hoveredNodeId: null,
         hoveredElementId: null,
+        hoveredConnectionId: null,
       }
     }));
 
@@ -1281,6 +1366,49 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
   deleteConnection: (id) => {
     set((state) => {
+      // Handle default connection deletion (parent-child relationship)
+      if (id.startsWith('node-conn-')) {
+        const childId = id.replace('node-conn-', '');
+        const childNode = state.mindmap.nodes[childId];
+        
+        if (childNode && childNode.parentId) {
+          const parentId = childNode.parentId;
+          const parentNode = state.mindmap.nodes[parentId];
+          
+          if (parentNode) {
+            const newNodes = {
+              ...state.mindmap.nodes,
+              [parentId]: {
+                ...parentNode,
+                children: parentNode.children.filter(cid => cid !== childId),
+              },
+              [childId]: {
+                ...childNode,
+                parentId: null, // Now an orphan/top-level node
+              }
+            };
+
+            const newMindmap = {
+              ...state.mindmap,
+              nodes: newNodes,
+              updatedAt: new Date(),
+            };
+            
+            localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newMindmap));
+            return {
+              mindmap: newMindmap,
+              savedMindmaps: updateSavedList(newMindmap, state.savedMindmaps),
+              selectionState: {
+                ...state.selectionState,
+                selectedConnectionIds: state.selectionState.selectedConnectionIds.filter((connId) => connId !== id),
+                hoveredConnectionId: state.selectionState.hoveredConnectionId === id ? null : state.selectionState.hoveredConnectionId,
+              },
+            };
+          }
+        }
+      }
+
+      // Handle free connection deletion
       const { [id]: _, ...rest } = state.mindmap.connections;
       const newState = {
         mindmap: {
@@ -1288,10 +1416,20 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           connections: rest,
           updatedAt: new Date(),
         },
+        selectionState: {
+          ...state.selectionState,
+          selectedConnectionIds: state.selectionState.selectedConnectionIds.filter((connId) => connId !== id),
+          hoveredConnectionId: state.selectionState.hoveredConnectionId === id ? null : state.selectionState.hoveredConnectionId,
+        },
       };
       localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(newState.mindmap));
       return newState;
     });
+    
+    // Re-layout after removing parent-child relationship
+    if (id.startsWith('node-conn-')) {
+      setTimeout(() => get().applyLayout(), 0);
+    }
   },
 
   updateNodePosition: (nodeId: string, position: Position) => {

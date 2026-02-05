@@ -39,6 +39,8 @@ import {
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import { Upload } from 'lucide-react';
+import { toast } from 'sonner';
+import { encryptAMF, decryptAMF } from '@/utils/amfEncryption';
 
 const Toolbar: React.FC = () => {
   const { theme } = useTheme();
@@ -56,6 +58,9 @@ const Toolbar: React.FC = () => {
     layoutConfig,
     setLayoutConfig,
     setMindmap,
+    clearSelection,
+    deleteElement,
+    deleteConnection,
   } = useMindmapStore();
 
   // Resolve theme colors for export
@@ -101,6 +106,8 @@ const Toolbar: React.FC = () => {
   };
   
   const selectedId = selectionState.selectedNodeIds[0];
+  const selectedElementId = selectionState.selectedElementIds[0];
+  const selectedConnectionId = selectionState.selectedConnectionIds[0];
   const selectedNode = selectedId ? mindmap.nodes[selectedId] : null;
   const isRoot = selectedId === mindmap.rootId;
   const hasChildren = selectedNode && selectedNode.children.length > 0;
@@ -112,8 +119,21 @@ const Toolbar: React.FC = () => {
   };
   
   const handleDelete = () => {
-    if (selectedId && !isRoot) {
-      deleteNode(selectedId);
+    if (selectionState.selectedNodeIds.length > 0) {
+      selectionState.selectedNodeIds.forEach(id => {
+        if (id !== mindmap.rootId) deleteNode(id);
+      });
+      clearSelection();
+    } else if (selectionState.selectedElementIds.length > 0) {
+      selectionState.selectedElementIds.forEach(id => {
+        deleteElement(id);
+      });
+      clearSelection();
+    } else if (selectionState.selectedConnectionIds.length > 0) {
+      selectionState.selectedConnectionIds.forEach(id => {
+        deleteConnection(id);
+      });
+      clearSelection();
     }
   };
   
@@ -469,8 +489,9 @@ const Toolbar: React.FC = () => {
 
   const handleExportAMF = () => {
     const data = {
-      version: '1.0.0',
+      version: '1.1.0', // Updated version for encrypted format
       type: 'AI-MindFlow-Data',
+      isEncrypted: true,
       timestamp: new Date().toISOString(),
       mindmap: {
         ...mindmap,
@@ -479,15 +500,20 @@ const Toolbar: React.FC = () => {
         updatedAt: new Date(mindmap.updatedAt).toISOString(),
       }
     };
-    const content = JSON.stringify(data, null, 2);
-    const blob = new Blob([content], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `${mindmap.name}.amf`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-    toast.success("导出专属文件成功");
+    
+    try {
+      const blob = encryptAMF(data);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = `${mindmap.name}.amf`;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("导出加密专属文件成功");
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error("导出失败");
+    }
   };
 
   const handleImportAMF = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -495,10 +521,25 @@ const Toolbar: React.FC = () => {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
-        const content = event.target?.result as string;
-        const data = JSON.parse(content);
+        const buffer = event.target?.result as ArrayBuffer;
+        let data;
+        
+        // Try to decrypt first
+        try {
+          data = decryptAMF(buffer);
+        } catch (decryptError) {
+          // Fallback for old unencrypted files (try to read as text)
+          const decoder = new TextDecoder();
+          const text = decoder.decode(buffer);
+          try {
+            data = JSON.parse(text);
+          } catch (jsonError) {
+            // If both fail, throw the decryption error
+            throw decryptError;
+          }
+        }
 
         if (data.type !== 'AI-MindFlow-Data') {
           throw new Error('不支持的文件格式');
@@ -519,10 +560,10 @@ const Toolbar: React.FC = () => {
         }, 100);
       } catch (error) {
         console.error('Import error:', error);
-        toast.error(error instanceof Error ? error.message : "导入失败，文件格式错误");
+        toast.error(error instanceof Error ? error.message : "导入失败，文件格式错误或已损坏");
       }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
     // Clear input
     e.target.value = '';
   };
@@ -565,9 +606,13 @@ const Toolbar: React.FC = () => {
       
       <ToolbarButton
         icon={<Trash2 className="w-4 h-4" />}
-        tooltip="删除节点 (Delete)"
+        tooltip="删除选中项 (Delete)"
         onClick={handleDelete}
-        disabled={!selectedId || isRoot}
+        disabled={
+          (selectionState.selectedNodeIds.length === 0 || (selectionState.selectedNodeIds.length === 1 && selectionState.selectedNodeIds[0] === mindmap.rootId)) &&
+          selectionState.selectedElementIds.length === 0 &&
+          selectionState.selectedConnectionIds.length === 0
+        }
         variant="destructive"
       />
       

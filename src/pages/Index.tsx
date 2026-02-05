@@ -8,7 +8,7 @@ import StylePanel from '@/components/mindmap/StylePanel';
 import AISettings from '@/components/mindmap/AISettings';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { useMindmapStore } from '@/stores/mindmapStore';
-import { Brain, FilePlus, Save, AlertTriangle, ChevronRight, History, Trash2 } from 'lucide-react';
+import { FilePlus, Save, AlertTriangle, ChevronRight, History, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   ScrollArea,
@@ -65,8 +65,8 @@ const Index: React.FC = () => {
       {/* Header */}
       <header className="flex-shrink-0 h-14 border-b border-border flex items-center px-4 gap-4 bg-card/50 backdrop-blur-md z-50">
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
-            <Brain className="w-5.5 h-5.5 text-primary-foreground" />
+          <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center shadow-lg shadow-primary/10">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
           </div>
           <span className="font-bold text-lg tracking-tight text-foreground hidden sm:inline-block">AI-MindFlow</span>
         </div>
