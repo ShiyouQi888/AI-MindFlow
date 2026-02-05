@@ -920,8 +920,15 @@ const MindmapCanvas: React.FC = () => {
           sX = source.position.x + width + 10 / viewport.zoom;
           sY = source.position.y - fontSize / 2;
         } else {
-          sX = source.position.x + (source.width || 0) + 10 / viewport.zoom;
-          sY = source.position.y + (source.height || 0) / 2;
+          const sWidth = source.width || 0;
+          const sHeight = source.height || 0;
+          const sDrawX = sWidth < 0 ? source.position.x + sWidth : source.position.x;
+          const sDrawY = sHeight < 0 ? source.position.y + sHeight : source.position.y;
+          const sDrawW = Math.abs(sWidth);
+          const sDrawH = Math.abs(sHeight);
+          
+          sX = sDrawX + sDrawW + 10 / viewport.zoom;
+          sY = sDrawY + sDrawH / 2;
         }
       }
 
@@ -936,8 +943,15 @@ const MindmapCanvas: React.FC = () => {
           tX = target.position.x + width / 2;
           tY = target.position.y - fontSize / 2;
         } else {
-          tX = target.position.x + (target.width || 0) / 2;
-          tY = target.position.y + (target.height || 0) / 2;
+          const tWidth = target.width || 0;
+          const tHeight = target.height || 0;
+          const tDrawX = tWidth < 0 ? target.position.x + tWidth : target.position.x;
+          const tDrawY = tHeight < 0 ? target.position.y + tHeight : target.position.y;
+          const tDrawW = Math.abs(tWidth);
+          const tDrawH = Math.abs(tHeight);
+          
+          tX = tDrawX + tDrawW / 2;
+          tY = tDrawY + tDrawH / 2;
         }
       }
 
@@ -1414,8 +1428,15 @@ const MindmapCanvas: React.FC = () => {
           hX = el.position.x + width + 10 / viewport.zoom;
           hY = el.position.y - fontSize / 2;
         } else {
-          hX = el.position.x + (el.width || 0) + 10 / viewport.zoom;
-          hY = el.position.y + (el.height || 0) / 2;
+          const elWidth = el.width || 0;
+          const elHeight = el.height || 0;
+          const elDrawX = elWidth < 0 ? el.position.x + elWidth : el.position.x;
+          const elDrawY = elHeight < 0 ? el.position.y + elHeight : el.position.y;
+          const elDrawW = Math.abs(elWidth);
+          const elDrawH = Math.abs(elHeight);
+          
+          hX = elDrawX + elDrawW + 10 / viewport.zoom;
+          hY = elDrawY + elDrawH / 2;
         }
         
         ctx.beginPath();
@@ -1592,26 +1613,74 @@ const MindmapCanvas: React.FC = () => {
         // Simple check to avoid rendering if too small
         if (width < 20 || height < 20) return null;
 
+        const isSelected = selectionState.selectedElementIds.includes(el.id);
+        const isHovered = selectionState.hoveredElementId === el.id;
+
         return (
           <div
             key={el.id}
-            className="absolute pointer-events-auto z-[10]"
+            className="absolute z-[10]"
             style={{
               left: x,
               top: y,
               width: width,
               height: height,
-              // Reduced opacity and no pointer events during dragging/panning
+              // Reduced opacity during dragging/panning
               opacity: (dragState.isDragging || canvasState.isPanning) ? 0.3 : 1,
-              pointerEvents: (dragState.isDragging || canvasState.isPanning) ? 'none' : 'auto',
+              // When selected, we want to allow clicking handles on the canvas
+              pointerEvents: 'none',
             }}
           >
-            <iframe
-              src={videoInfo.embedUrl!}
-              className="w-full h-full border-0 rounded-md shadow-lg"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            <div className="relative w-full h-full group">
+              <iframe
+                src={videoInfo.embedUrl!}
+                className="w-full h-full border-0 rounded-md shadow-lg pointer-events-auto"
+                style={{
+                  pointerEvents: (dragState.isDragging || canvasState.isPanning) ? 'none' : 'auto',
+                }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+              
+              {/* Controls Overlay - Visible on Hover or Selection */}
+              {(isSelected || isHovered) && !dragState.isDragging && !canvasState.isPanning && (
+                <div className="absolute top-2 right-2 flex gap-2 pointer-events-auto z-20">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateElement(el.id, { url: '' }); // Trigger refresh or clear
+                      setTimeout(() => updateElement(el.id, { url: el.url }), 50);
+                    }}
+                    className="p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-md backdrop-blur-sm transition-colors"
+                    title="刷新视频"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteElement(el.id);
+                    }}
+                    className="p-1.5 bg-red-500/80 hover:bg-red-600 text-white rounded-md backdrop-blur-sm transition-colors"
+                    title="删除视频"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  </button>
+                </div>
+              )}
+
+              {/* Interaction Block Overlay - Visible when NOT selected/hovered */}
+              {!isSelected && !isHovered && (
+                <div 
+                  className="absolute inset-0 pointer-events-auto cursor-default z-10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    selectElement(el.id);
+                  }}
+                  onMouseEnter={() => setHoveredElement(el.id)}
+                />
+              )}
+            </div>
           </div>
         );
       })}
