@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { useTheme } from 'next-themes';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { getNodeColor, MindNode, Position, CanvasElement } from '@/types/mindmap';
+import { parseVideoUrl, isThirdPartyVideo } from '@/utils/video';
 import InputDialog from './InputDialog';
 import InlineAIInput from './InlineAIInput';
 
@@ -1242,81 +1243,115 @@ const MindmapCanvas: React.FC = () => {
           const drawH = Math.abs(vidHeight);
           
           if (el.url) {
-            let video = videoCache.current[el.url];
-            if (!video) {
-              video = document.createElement('video');
-              video.src = el.url;
-              video.muted = true;
-              video.loop = true;
-              video.playsInline = true;
-              video.crossOrigin = 'anonymous';
-              video.preload = 'auto';
+            const videoInfo = parseVideoUrl(el.url);
+            
+            if (videoInfo.type !== 'direct') {
+              // Draw placeholder for third-party videos (YouTube, Bilibili)
+              ctx.fillStyle = '#000000';
+              ctx.fillRect(drawX, drawY, drawW, drawH);
               
-              video.onloadeddata = () => {
-                videoCache.current[el.url!] = video!;
-                if (!storedWidth || !storedHeight || Math.abs(storedWidth) < 2 || Math.abs(storedHeight) < 2) {
-                  const maxWidth = 400;
-                  const ratio = video!.videoHeight / video!.videoWidth;
-                  const width = Math.min(maxWidth, video!.videoWidth);
-                  const height = width * ratio;
-                  updateElement(el.id, { width, height });
-                }
-                forceRender();
-              };
+              // Draw platform icon/text
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 14px Inter';
+              ctx.textAlign = 'center';
+              ctx.fillText(videoInfo.type === 'youtube' ? 'YouTube' : 'Bilibili', drawX + drawW / 2, drawY + drawH / 2 - 10);
               
-              video.onerror = () => {
-                ctx.strokeStyle = '#ef4444';
-                ctx.strokeRect(drawX, drawY, drawW, drawH);
-                ctx.fillStyle = '#ef4444';
-                ctx.fillText('视频加载失败', drawX + 5, drawY + 15);
-              };
+              // Draw play button
+              const centerX = drawX + drawW / 2;
+              const centerY = drawY + drawH / 2;
+              const radius = Math.min(drawW, drawH) * 0.15;
               
-              videoCache.current[el.url] = video;
-              video.load();
-            }
+              ctx.beginPath();
+              ctx.arc(centerX, centerY + 15, radius, 0, Math.PI * 2);
+              ctx.fillStyle = videoInfo.type === 'youtube' ? '#FF0000' : '#00A1D6';
+              ctx.fill();
+              
+              ctx.beginPath();
+              const triSize = radius * 0.5;
+              ctx.moveTo(centerX - triSize * 0.4, centerY + 15 - triSize);
+              ctx.lineTo(centerX + triSize * 0.8, centerY + 15);
+              ctx.lineTo(centerX - triSize * 0.4, centerY + 15 + triSize);
+              ctx.closePath();
+              ctx.fillStyle = '#ffffff';
+              ctx.fill();
+            } else {
+              // Existing direct video rendering logic
+              let video = videoCache.current[el.url];
+              if (!video) {
+                video = document.createElement('video');
+                video.src = el.url;
+                video.muted = true;
+                video.loop = true;
+                video.playsInline = true;
+                video.crossOrigin = 'anonymous';
+                video.preload = 'auto';
+                
+                video.onloadeddata = () => {
+                  videoCache.current[el.url!] = video!;
+                  if (!storedWidth || !storedHeight || Math.abs(storedWidth) < 2 || Math.abs(storedHeight) < 2) {
+                    const maxWidth = 400;
+                    const ratio = video!.videoHeight / video!.videoWidth;
+                    const width = Math.min(maxWidth, video!.videoWidth);
+                    const height = width * ratio;
+                    updateElement(el.id, { width, height });
+                  }
+                  forceRender();
+                };
+                
+                video.onerror = () => {
+                  ctx.strokeStyle = '#ef4444';
+                  ctx.strokeRect(drawX, drawY, drawW, drawH);
+                  ctx.fillStyle = '#ef4444';
+                  ctx.fillText('视频加载失败', drawX + 5, drawY + 15);
+                };
+                
+                videoCache.current[el.url] = video;
+                video.load();
+              }
 
-            if (video.readyState >= 2) { // HAVE_CURRENT_DATA
-               ctx.drawImage(video, drawX, drawY, drawW, drawH);
-               
-               // Draw play/pause button overlay if not playing or if hovered
-               if (video.paused || isHovered || isSelected) {
-                 ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                 ctx.fillRect(drawX, drawY, drawW, drawH);
+              if (video.readyState >= 2) { // HAVE_CURRENT_DATA
+                 ctx.drawImage(video, drawX, drawY, drawW, drawH);
                  
-                 const centerX = drawX + drawW / 2;
-                 const centerY = drawY + drawH / 2;
-                 const radius = Math.min(drawW, drawH) * 0.2;
-                 
-                 ctx.beginPath();
-                 ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
-                 ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                 ctx.fill();
-                 
-                 if (video.paused) {
-                   // Draw Play triangle
+                 // Draw play/pause button overlay if not playing or if hovered
+                 if (video.paused || isHovered || isSelected) {
+                   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                   ctx.fillRect(drawX, drawY, drawW, drawH);
+                   
+                   const centerX = drawX + drawW / 2;
+                   const centerY = drawY + drawH / 2;
+                   const radius = Math.min(drawW, drawH) * 0.2;
+                   
                    ctx.beginPath();
-                   const triSize = radius * 0.5;
-                   ctx.moveTo(centerX - triSize * 0.4, centerY - triSize);
-                   ctx.lineTo(centerX + triSize * 0.8, centerY);
-                   ctx.lineTo(centerX - triSize * 0.4, centerY + triSize);
-                   ctx.closePath();
-                   ctx.fillStyle = '#000000';
+                   ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                   ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
                    ctx.fill();
-                 } else {
-                   // Draw Pause bars
-                   const barW = radius * 0.2;
-                   const barH = radius * 0.8;
-                   ctx.fillStyle = '#000000';
-                   ctx.fillRect(centerX - barW * 1.5, centerY - barH / 2, barW, barH);
-                   ctx.fillRect(centerX + barW * 0.5, centerY - barH / 2, barW, barH);
+                   
+                   if (video.paused) {
+                     // Draw Play triangle
+                     ctx.beginPath();
+                     const triSize = radius * 0.5;
+                     ctx.moveTo(centerX - triSize * 0.4, centerY - triSize);
+                     ctx.lineTo(centerX + triSize * 0.8, centerY);
+                     ctx.lineTo(centerX - triSize * 0.4, centerY + triSize);
+                     ctx.closePath();
+                     ctx.fillStyle = '#000000';
+                     ctx.fill();
+                   } else {
+                     // Draw Pause bars
+                     const barW = radius * 0.2;
+                     const barH = radius * 0.8;
+                     ctx.fillStyle = '#000000';
+                     ctx.fillRect(centerX - barW * 1.5, centerY - barH / 2, barW, barH);
+                     ctx.fillRect(centerX + barW * 0.5, centerY - barH / 2, barW, barH);
+                   }
                  }
-               }
-             } else {
-              ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
-              ctx.strokeRect(drawX, drawY, drawW, drawH);
-              ctx.fillStyle = el.style.stroke || colors.primary || '#3b82f6';
-              ctx.font = '12px Inter';
-              ctx.fillText('正在加载视频...', drawX + 5, drawY + 15);
+               } else {
+                ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
+                ctx.strokeRect(drawX, drawY, drawW, drawH);
+                ctx.fillStyle = el.style.stroke || colors.primary || '#3b82f6';
+                ctx.font = '12px Inter';
+                ctx.fillText('正在加载视频...', drawX + 5, drawY + 15);
+              }
             }
           } else {
             ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
@@ -1535,6 +1570,52 @@ const MindmapCanvas: React.FC = () => {
         </div>
       )}
 
+      {/* Third Party Video Players */}
+      {Object.values(elements).map((el) => {
+        if (el.type !== 'video' || !el.url) return null;
+        const videoInfo = parseVideoUrl(el.url);
+        if (videoInfo.type === 'direct') return null;
+
+        const vidWidth = el.width || 160;
+        const vidHeight = el.height || 90;
+        
+        const drawX = vidWidth < 0 ? el.position.x + vidWidth : el.position.x;
+        const drawY = vidHeight < 0 ? el.position.y + vidHeight : el.position.y;
+        const drawW = Math.abs(vidWidth);
+        const drawH = Math.abs(vidHeight);
+
+        const x = drawX * viewport.zoom + viewport.x;
+        const y = drawY * viewport.zoom + viewport.y;
+        const width = drawW * viewport.zoom;
+        const height = drawH * viewport.zoom;
+
+        // Simple check to avoid rendering if too small
+        if (width < 20 || height < 20) return null;
+
+        return (
+          <div
+            key={el.id}
+            className="absolute pointer-events-auto z-[10]"
+            style={{
+              left: x,
+              top: y,
+              width: width,
+              height: height,
+              // Reduced opacity and no pointer events during dragging/panning
+              opacity: (dragState.isDragging || canvasState.isPanning) ? 0.3 : 1,
+              pointerEvents: (dragState.isDragging || canvasState.isPanning) ? 'none' : 'auto',
+            }}
+          >
+            <iframe
+              src={videoInfo.embedUrl!}
+              className="w-full h-full border-0 rounded-md shadow-lg"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        );
+      })}
+
       <InputDialog
         isOpen={inputDialog.isOpen}
         onClose={handleInputDialogClose}
@@ -1552,7 +1633,7 @@ const MindmapCanvas: React.FC = () => {
           inputDialog.type === 'text' 
             ? '请输入文字内容' 
             : inputDialog.type === 'video'
-              ? 'https://example.com/video.mp4'
+              ? '支持 YouTube, Bilibili 或直接视频链接'
               : 'https://example.com/image.png'
         }
       />
