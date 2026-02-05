@@ -1694,12 +1694,21 @@ const MindmapCanvas: React.FC = () => {
                     height="100%"
                     controls={true}
                     playing={false}
-                    light={false} // Can set to true for a preview image first
-                    pip={true}
+                    light={false}
+                    pip={false} // Disable PiP by default to prevent Metadata error
                     stopOnUnmount={false}
                     config={{
                       youtube: {
-                        playerVars: { showinfo: 1 }
+                        playerVars: { 
+                          showinfo: 0,
+                          rel: 0,
+                          modestbranding: 1
+                        }
+                      },
+                      file: {
+                        attributes: {
+                          controlsList: 'nodownload'
+                        }
                       }
                     }}
                   />
