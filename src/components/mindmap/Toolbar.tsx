@@ -20,6 +20,8 @@ import {
   Wand2,
   FileText,
   Type,
+  Maximize,
+  Eye,
   Image as ImageIcon,
 } from 'lucide-react';
 import { useMindmapStore } from '@/stores/mindmapStore';
@@ -58,6 +60,7 @@ const Toolbar: React.FC = () => {
     layoutConfig,
     setLayoutConfig,
     setMindmap,
+    setPreviewMode,
     clearSelection,
     deleteElement,
     deleteConnection,
@@ -676,6 +679,14 @@ const Toolbar: React.FC = () => {
         onClick={organizeMindmap}
       />
       
+      <Separator orientation="vertical" className="h-6 mx-1" />
+
+      <ToolbarButton
+        icon={<Maximize className="w-4 h-4" />}
+        tooltip="预览模式 (F11 / Esc 退出)"
+        onClick={() => setPreviewMode(true)}
+      />
+
       <DropdownMenu>
         <Tooltip>
           <TooltipTrigger asChild>

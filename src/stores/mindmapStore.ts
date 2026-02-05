@@ -47,10 +47,12 @@ interface MindmapStore {
   editingNodeId: string | null;
   editingElementId: string | null;
   currentTool: ToolType;
+  isPreviewMode: boolean;
   
   // Actions
   setAIConfig: (config: Partial<AIConfig>) => void;
   setMindmap: (mindmap: MindMap) => void;
+  setPreviewMode: (isPreview: boolean) => void;
   loadMindmap: (id: string) => void;
   deleteMindmap: (id: string) => void;
   fetchUserMindmaps: () => Promise<void>;
@@ -331,6 +333,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     editingNodeId: null,
     editingElementId: null,
     currentTool: 'select',
+    isPreviewMode: false,
     isAIProcessing: false,
     aiProgressMessage: '',
     aiProcessingNodeId: null,
@@ -352,7 +355,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           hoveredNodeId: null,
           hoveredElementId: null,
           hoveredConnectionId: null,
-        }
+        },
+        isPreviewMode: false,
       });
     },
 
@@ -382,6 +386,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
         };
       });
+    },
+
+    setPreviewMode: (isPreview) => {
+      set({ isPreviewMode: isPreview });
     },
 
     loadMindmap: (id) => {

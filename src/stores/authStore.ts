@@ -47,22 +47,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Get initial session
       const { data: { session } } = await supabase.auth.getSession();
       
-      if (session?.user) {
-        set({ user: session.user });
+      const user = session?.user ?? null;
+      if (user) {
+        set({ user });
         await Promise.all([
-          get().fetchProfile(session.user.id),
-          get().fetchSubscription(session.user.id)
+          get().fetchProfile(user.id),
+          get().fetchSubscription(user.id),
+          useMindmapStore.getState().fetchUserMindmaps()
         ]);
       }
 
       // Listen for auth changes
       supabase.auth.onAuthStateChange(async (event, session) => {
+        const user = session?.user ?? null;
+        
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          if (session?.user) {
-            set({ user: session.user });
+          if (user) {
+            set({ user });
             await Promise.all([
-              get().fetchProfile(session.user.id),
-              get().fetchSubscription(session.user.id)
+              get().fetchProfile(user.id),
+              get().fetchSubscription(user.id),
+              useMindmapStore.getState().fetchUserMindmaps()
             ]);
           }
         } else if (event === 'SIGNED_OUT') {
@@ -129,12 +134,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    if (isSupabaseConfigured) {
-      await supabase.auth.signOut();
+    try {
+      if (isSupabaseConfigured) {
+        await supabase.auth.signOut();
+      }
+      // Clear mindmap store data on signout
+      useMindmapStore.getState().resetAll();
+      set({ user: null, profile: null, subscription: null });
+      
+      // Refresh the page to ensure all states are reset properly
+      window.location.reload();
+    } catch (error) {
+      console.error('Error during sign out:', error);
+      // Fallback refresh even if error occurs
+      window.location.reload();
     }
-    // Clear mindmap store data on signout
-    useMindmapStore.getState().resetAll();
-    set({ user: null, profile: null, subscription: null });
   },
 
   fetchProfile: async (userId: string) => {
@@ -160,24 +174,4 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 }));
 
-// Initialize Auth listener
-if (isSupabaseConfigured) {
-  supabase.auth.onAuthStateChange(async (event, session) => {
-    const { user } = session || {};
-    useAuthStore.setState({ user: user ?? null, loading: false });
-    
-    if (user) {
-      await useAuthStore.getState().fetchProfile(user.id);
-      await useAuthStore.getState().fetchSubscription(user.id);
-      await useMindmapStore.getState().fetchUserMindmaps();
-    }
-    
-    useAuthStore.getState().setInitialized(true);
-  });
-} else {
-  // Set as initialized but with no user if not configured
-  setTimeout(() => {
-    useAuthStore.setState({ loading: false, initialized: true });
-  }, 0);
-}
 
