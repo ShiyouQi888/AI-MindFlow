@@ -100,7 +100,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
                 <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-md p-1.5">
                   <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
                 </div>
-                <h2 className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">AI MindFlow</h2>
+                <DialogTitle className="text-3xl font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">AI MindFlow</DialogTitle>
               </div>
               <p className="text-sm text-muted-foreground">记录灵感，连接思绪</p>
             </div>

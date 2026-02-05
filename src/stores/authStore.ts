@@ -34,15 +34,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     if (get().initialized) return;
+    
+    // Set initialized to true immediately to prevent concurrent calls
+    set({ initialized: true });
 
     if (!isSupabaseConfigured) {
-      set({ loading: false, initialized: true });
+      set({ loading: false });
       return;
     }
 
     try {
       // Get initial session
-      const { data: { session }, error } = await supabase.auth.getSession();
+      const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
         set({ user: session.user });
@@ -69,8 +72,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     } catch (err) {
       console.error('Auth initialization error:', err);
+      // If failed, allow retry
+      set({ initialized: false });
     } finally {
-      set({ loading: false, initialized: true });
+      set({ loading: false });
     }
   },
 

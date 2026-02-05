@@ -71,12 +71,12 @@ const HelpGuideModal: React.FC<HelpGuideModalProps> = ({ open, onOpenChange }) =
         <div className="flex flex-1 overflow-hidden">
           {/* Sidebar */}
           <div className="w-[200px] border-r bg-muted/30 p-4 flex flex-col gap-1 shrink-0">
-            <div className="flex items-center gap-2 px-2 py-4 mb-2">
+            <DialogTitle className="flex items-center gap-2 px-2 py-4 mb-2">
               <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                 <BookOpen className="w-5 h-5" />
               </div>
-              <span className="font-bold">帮助指南</span>
-            </div>
+              <span className="font-bold text-foreground">帮助指南</span>
+            </DialogTitle>
             
             <TabsList className="flex flex-col h-auto bg-transparent p-0 gap-1">
               <TabsTrigger 
