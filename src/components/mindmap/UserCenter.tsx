@@ -175,7 +175,7 @@ const UserCenter: React.FC<UserCenterProps> = ({ open, onOpenChange }) => {
                 </Label>
                 <Input
                   id="base-url"
-                  placeholder="https://api.deepseek.com"
+                  placeholder="请输入 API 地址"
                   value={config.baseUrl}
                   onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
                 />
@@ -188,7 +188,7 @@ const UserCenter: React.FC<UserCenterProps> = ({ open, onOpenChange }) => {
                 </Label>
                 <Input
                   id="model"
-                  placeholder="deepseek-chat"
+                  placeholder="请输入模型名称"
                   value={config.model}
                   onChange={(e) => setConfig({ ...config, model: e.target.value })}
                 />

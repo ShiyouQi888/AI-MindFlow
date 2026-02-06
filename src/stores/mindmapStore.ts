@@ -28,8 +28,8 @@ const generateId = () => Math.random().toString(36).substring(2, 11);
 
 const DEFAULT_AI_CONFIG: AIConfig = {
   apiKey: import.meta.env.VITE_DEEPSEEK_API_KEY || '',
-  baseUrl: import.meta.env.VITE_DEEPSEEK_BASE_URL || 'https://api.deepseek.com',
-  model: import.meta.env.VITE_DEEPSEEK_MODEL || 'deepseek-chat',
+  baseUrl: import.meta.env.VITE_DEEPSEEK_BASE_URL || '',
+  model: import.meta.env.VITE_DEEPSEEK_MODEL || '',
   enabled: false,
 };
 
@@ -117,11 +117,38 @@ interface MindmapStore {
   updateNodePosition: (nodeId: string, position: Position) => void;
   
   // AI Actions
-  generateSubNodes: (nodeId: string, prompt?: string) => Promise<void>;
+  generateSubNodes: (nodeId: string, prompt?: string, options?: { replace?: boolean }) => Promise<void>;
   isAIProcessing: boolean;
   aiProgressMessage: string;
   aiProcessingNodeId: string | null;
 }
+
+const createEmptyMindmap = (): MindMap => {
+  const rootId = generateId();
+  return {
+    id: generateId(),
+    name: '未命名思维导图',
+    rootId,
+    nodes: {
+      [rootId]: {
+        id: rootId,
+        parentId: null,
+        text: '中心主题',
+        position: { x: 400, y: 300 },
+        collapsed: false,
+        children: [],
+        level: 0,
+        width: 120,
+        height: 36,
+      },
+    },
+    elements: {},
+    connections: {},
+    viewport: { x: 0, y: 0, zoom: 1 },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+};
 
 const createInitialMindmap = (): MindMap => {
   const rootId = generateId();
@@ -523,12 +550,13 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     setCanvasSize: (width, height) => set({ canvasSize: { width, height } }),
 
     resetAll: () => {
-      const initialMindmap = createInitialMindmap();
-      localStorage.removeItem('aimindflow_current_mindmap');
-      localStorage.removeItem('aimindflow_saved_mindmaps');
+      const emptyMindmap = createEmptyMindmap();
+      // 保存清空后的状态到本地存储，防止刷新后恢复帮助文档
+      localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(emptyMindmap));
+      localStorage.setItem('aimindflow_saved_mindmaps', JSON.stringify([emptyMindmap]));
       set({ 
-        mindmap: initialMindmap, 
-        savedMindmaps: [],
+        mindmap: emptyMindmap, 
+        savedMindmaps: [emptyMindmap],
         selectionState: {
           selectedNodeIds: [],
           selectedElementIds: [],
@@ -538,6 +566,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           hoveredConnectionId: null,
         },
         isPreviewMode: false,
+        layoutConfig: {
+          ...DEFAULT_LAYOUT_CONFIG,
+          direction: 'both',
+        },
       });
     },
 
@@ -811,7 +843,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   createNewMindmap: () => {
-    const newMindmap = createInitialMindmap();
+    const newMindmap = createEmptyMindmap();
     logActivity('create_mindmap', { id: newMindmap.id, name: newMindmap.name });
     set((state) => {
       persistMindmap(newMindmap);
@@ -1746,8 +1778,9 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     });
   },
 
-  generateSubNodes: async (nodeId, customPrompt) => {
+  generateSubNodes: async (nodeId, customPrompt, options) => {
     const { mindmap, aiConfig, addNode, applyLayout } = get();
+    const isReplace = options?.replace === true;
     
     // Check if user is logged in and subscription status
     const authStore = (await import('./authStore')).useAuthStore.getState();
@@ -1869,17 +1902,55 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         };
 
         if (nodeId === mindmap.rootId && rootNodes.length > 0) {
-          // Clear existing children if AI is used on the root node
-          const currentChildren = [...mindmap.nodes[nodeId].children];
-          currentChildren.forEach(childId => get().deleteNode(childId));
+          // Only clear existing children if replace is explicitly requested
+          if (isReplace) {
+            const currentChildren = [...mindmap.nodes[nodeId].children];
+            currentChildren.forEach(childId => get().deleteNode(childId));
+            
+            // Also clear other elements and connections if it's a global replace
+            set((state) => ({
+              mindmap: {
+                ...state.mindmap,
+                elements: {},
+                connections: {},
+              }
+            }));
+          }
 
           if (rootNodes.length === 1) {
             // If there's only one root-level node in AI response, use it as the new root text
             // and add its children as direct sub-nodes
-            get().updateNodeText(nodeId, rootNodes[0].text);
+            const newText = rootNodes[0].text;
+            
+            // Only update root text if replace is true or it's default text
+            const isDefaultText = node.text === '使用帮助' || node.text === '未命名思维导图' || node.text === '中心主题';
+            if (isReplace || isDefaultText) {
+              get().updateNodeText(nodeId, newText);
+              
+              // Also update mindmap name if it's default
+              if (get().mindmap.name === '使用帮助' || get().mindmap.name === '未命名思维导图') {
+                get().updateMindmapName(newText);
+              }
+            }
+            
             addNodesRecursive(nodeId, rootNodes[0].children);
           } else {
             // If there are multiple root-level nodes, add them all as children
+            // And update the root text to the prompt if it's requested
+            if (isReplace && customPrompt) {
+              // Clean the prompt to use as a title
+              const cleanTitle = customPrompt
+                .replace(/^(帮我|请|帮我生成|请生成|帮我写|请写|创建一个关于|生成一个关于|关于)(一个|关于)?/g, '')
+                .replace(/(的思维导图|的导图|的结构图|的结构|思维导图|导图)$/g, '')
+                .trim();
+                
+              const newText = cleanTitle.length > 30 ? cleanTitle.substring(0, 30) + '...' : (cleanTitle || customPrompt);
+              get().updateNodeText(nodeId, newText);
+              
+              if (get().mindmap.name === '使用帮助' || get().mindmap.name === '未命名思维导图') {
+                get().updateMindmapName(newText);
+              }
+            }
             addNodesRecursive(nodeId, rootNodes);
           }
         } else {

@@ -24,6 +24,8 @@ import {
   Maximize,
   Eye,
   Image as ImageIcon,
+  Sparkles,
+  Eraser,
 } from 'lucide-react';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { getNodeColor } from '@/types/mindmap';
@@ -45,7 +47,12 @@ import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { encryptAMF, decryptAMF } from '@/utils/amfEncryption';
 
-const Toolbar: React.FC = () => {
+interface ToolbarProps {
+  onOpenGlobalAI?: () => void;
+  onClearScreen?: () => void;
+}
+
+const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
   const { theme } = useTheme();
   const {
     mindmap,
@@ -65,6 +72,7 @@ const Toolbar: React.FC = () => {
     clearSelection,
     deleteElement,
     deleteConnection,
+    resetAll,
   } = useMindmapStore();
 
   // Resolve theme colors for export
@@ -668,6 +676,29 @@ const Toolbar: React.FC = () => {
         icon={<Wand2 className="w-4 h-4" />}
         tooltip="一键整理"
         onClick={organizeMindmap}
+      />
+      
+      <Separator orientation="vertical" className="h-6 mx-1" />
+
+      <ToolbarButton
+        icon={<Sparkles className="w-4 h-4 text-primary" />}
+        tooltip="AI 自动生成导图"
+        onClick={() => onOpenGlobalAI?.()}
+      />
+
+      <ToolbarButton
+        icon={<Eraser className="w-4 h-4 text-destructive" />}
+        tooltip="清空画布"
+        onClick={() => {
+          if (window.confirm('确定要清空当前所有内容吗？')) {
+            resetAll();
+            setTimeout(() => {
+              applyLayout();
+              resetView();
+              onClearScreen?.();
+            }, 100);
+          }
+        }}
       />
       
       <Separator orientation="vertical" className="h-6 mx-1" />

@@ -8,6 +8,8 @@ import { getEmbedUrl } from '@/lib/utils';
 import { Maximize, Minimize, X, RotateCcw, Play, Pause } from 'lucide-react';
 import InputDialog from './InputDialog';
 import InlineAIInput from './InlineAIInput';
+import Toolbar from './Toolbar';
+import LeftToolbar from './LeftToolbar';
 
 const MindmapCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -58,6 +60,7 @@ const MindmapCanvas: React.FC = () => {
     setCanvasSize,
     focusNode,
     organizeMindmap,
+    resetAll,
   } = useMindmapStore();
   
   const { user, setAuthModalOpen } = useAuthStore();
@@ -1943,6 +1946,8 @@ const MindmapCanvas: React.FC = () => {
     return () => resizeObserver.disconnect();
   }, []);
   
+  const [globalAIInputOpen, setGlobalAIInputOpen] = useState(false);
+
   return (
     <div ref={containerRef} className="canvas-container w-full h-full">
       <canvas
@@ -1957,6 +1962,12 @@ const MindmapCanvas: React.FC = () => {
         onWheel={handleWheel}
       />
       
+      <Toolbar 
+        onOpenGlobalAI={() => setGlobalAIInputOpen(true)}
+      />
+
+      <LeftToolbar />
+
       {/* Inline Text Editor */}
       {editingNodeId && nodes[editingNodeId] && (
         <div className="fixed inset-0 z-[999] pointer-events-none node-text-editor">
@@ -2017,6 +2028,23 @@ const MindmapCanvas: React.FC = () => {
               ? 'https://example.com/video.mp4'
               : 'https://example.com/image.png'
         }
+      />
+
+      <InputDialog
+        isOpen={globalAIInputOpen}
+        onClose={() => setGlobalAIInputOpen(false)}
+        title="AI 自动创建思维导图"
+        type="ai"
+        placeholder="输入您想创建的主题，例如：'生成一个关于如何学习 Python 的思维导图'"
+        onSubmit={(prompt) => {
+          if (prompt.trim()) {
+            // 重置画布并应用 AI 生成（覆盖模式）
+            resetAll();
+            const currentRootId = useMindmapStore.getState().mindmap.rootId;
+            generateSubNodes(currentRootId, prompt, { replace: true });
+            setGlobalAIInputOpen(false);
+          }
+        }}
       />
 
       {aiInputState.isOpen && aiInputState.nodeId && nodes[aiInputState.nodeId] && (
