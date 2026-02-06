@@ -666,19 +666,14 @@ const MindmapCanvas: React.FC = () => {
       }
     }
 
-    // At low zoom, prioritize node selection over handles to make it feel more sensitive
-    const isLowZoom = viewport.zoom < 0.6;
-    if (isLowZoom && node) {
-      selectNode(node.id, e.shiftKey);
-      startDrag(node.id, pos, 'node');
-      if (containerRef.current) {
-        focusNode(node.id, containerRef.current.clientWidth, containerRef.current.clientHeight);
-      }
-      setCurrentTool('select');
+    // 1. Check for double click on node first (highest priority)
+    if (node && e.detail === 2) {
+      console.log('Double clicked node, opening editor:', node.id);
+      setEditingNode(node.id);
       return;
     }
 
-    // Check for AI handle first (to prioritize over connection handles)
+    // 2. Check for AI handle (prioritize over connection handles)
     if (aiConfig.enabled) {
       const handleSize = 15 / viewport.zoom;
       for (const id of selectionState.selectedNodeIds) {
@@ -701,30 +696,36 @@ const MindmapCanvas: React.FC = () => {
       }
     }
 
-    // Check for connection handle
+    // 3. Check for connection handle
     const connectionHandle = getConnectionHandleAtPosition(e.clientX, e.clientY);
     if (connectionHandle) {
       startDrag(connectionHandle.id, pos, 'connection', connectionHandle.handle);
       return;
     }
-    
-    // If a node is clicked, always prioritize selection/dragging regardless of tool
+
+    // 4. If a node is clicked (single click selection/dragging)
     if (node) {
-      if (e.detail === 2) {
-        // Double click - edit
-        setEditingNode(node.id);
-      } else {
+      // At low zoom, prioritize node selection over handles to make it feel more sensitive
+      const isLowZoom = viewport.zoom < 0.6;
+      if (isLowZoom) {
         selectNode(node.id, e.shiftKey);
         startDrag(node.id, pos, 'node');
-        
-        // Auto-zoom and center the node when clicked.
-        // We trigger this if the zoom is low (below 1.1) or if there are many nodes.
-        // This ensures a smooth focus experience across common zoom levels (70%, 75%, 100%, etc.)
-        if ((viewport.zoom < 1.1 || Object.keys(nodes).length > 10) && containerRef.current) {
+        if (containerRef.current) {
           focusNode(node.id, containerRef.current.clientWidth, containerRef.current.clientHeight);
         }
+        setCurrentTool('select');
+        return;
       }
-      // If we were about to draw something, cancel it since we clicked a node
+
+      // Normal zoom behavior
+      selectNode(node.id, e.shiftKey);
+      startDrag(node.id, pos, 'node');
+      
+      // Auto-zoom and center the node when clicked.
+      if ((viewport.zoom < 1.1 || Object.keys(nodes).length > 10) && containerRef.current) {
+        focusNode(node.id, containerRef.current.clientWidth, containerRef.current.clientHeight);
+      }
+      
       setCurrentTool('select');
       return;
     }
