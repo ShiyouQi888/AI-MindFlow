@@ -213,9 +213,31 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .single();
     
     if (data) {
+      // For free users, reset count if it's a new day
+      if (data.status === 'free') {
+        const lastUpdated = new Date(data.updated_at || data.expires_at || Date.now());
+        const now = new Date();
+        const isSameDay = lastUpdated.getDate() === now.getDate() && 
+                         lastUpdated.getMonth() === now.getMonth() && 
+                         lastUpdated.getFullYear() === now.getFullYear();
+        
+        if (!isSameDay) {
+          // Reset for new day
+          const { data: updatedData } = await supabase
+            .from('subscriptions')
+            .update({ ai_usage_count: 0, updated_at: new Date().toISOString() })
+            .eq('user_id', userId)
+            .select()
+            .single();
+          if (updatedData) {
+            set({ subscription: updatedData });
+            return;
+          }
+        }
+      }
       set({ subscription: data });
     } else if (error && error.code === 'PGRST116') {
-      // No subscription found, might need to create a default one or handle as free
+      // No subscription found, might need to create a default one
       console.log('No subscription found for user, using default free tier');
     }
   },
@@ -225,15 +247,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     
     const { data: currentSub } = await supabase
       .from('subscriptions')
-      .select('ai_usage_count')
+      .select('ai_usage_count, status')
       .eq('user_id', userId)
       .single();
+    
+    // Pro users have unlimited usage (or a very high limit, but here we just don't increment/check)
+    if (currentSub?.status === 'pro') return;
     
     const newCount = (currentSub?.ai_usage_count || 0) + increment;
     
     const { data, error } = await supabase
       .from('subscriptions')
-      .update({ ai_usage_count: newCount })
+      .update({ ai_usage_count: newCount, updated_at: new Date().toISOString() })
       .eq('user_id', userId)
       .select()
       .single();

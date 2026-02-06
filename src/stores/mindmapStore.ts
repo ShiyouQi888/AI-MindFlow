@@ -1596,8 +1596,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
     // Check AI usage limit
     if (subscription) {
-      if (subscription.ai_usage_count >= subscription.ai_limit) {
-        toast.error(`已达到 AI 使用次数限制 (${subscription.ai_usage_count}/${subscription.ai_limit})。请升级订阅以继续使用。`);
+      if (subscription.status === 'free' && subscription.ai_usage_count >= 1) {
+        toast.error(`免费用户每天限用 1 次 AI 功能。请升级订阅以解锁无限次数。`);
         return;
       }
     }
