@@ -58,7 +58,11 @@ const Index: React.FC = () => {
   // Handle preview mode keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isPreviewMode) {
+      // Don't intercept Escape if we're typing in an input (like a search bar or AI settings)
+      // unless it's specifically for exiting preview mode.
+      const isInput = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
+
+      if (e.key === 'Escape' && isPreviewMode && !isInput) {
         setPreviewMode(false);
       }
       // F11 to toggle preview mode instead of browser default if possible

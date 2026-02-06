@@ -1062,6 +1062,16 @@ const MindmapCanvas: React.FC = () => {
       const selectedElementId = selectionState.selectedElementIds[0];
       const selectedConnectionId = selectionState.selectedConnectionIds[0];
 
+      // Don't handle shortcuts if we're editing or if the focus is on an input
+      if (
+        editingNodeId || 
+        editingElementId || 
+        (e.target instanceof HTMLInputElement) || 
+        (e.target instanceof HTMLTextAreaElement)
+      ) {
+        return;
+      }
+
       switch (e.key) {
         case 'Tab':
           e.preventDefault();
