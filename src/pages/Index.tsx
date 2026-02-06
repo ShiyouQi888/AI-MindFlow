@@ -63,12 +63,14 @@ const Index: React.FC = () => {
       }
       // F11 to toggle preview mode instead of browser default if possible
       if (e.key === 'F11') {
-        e.preventDefault();
+        if (e.cancelable) {
+          e.preventDefault();
+        }
         setPreviewMode(!isPreviewMode);
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, { capture: true, passive: false });
+    return () => window.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [isPreviewMode, setPreviewMode]);
 
   // Handle browser fullscreen API

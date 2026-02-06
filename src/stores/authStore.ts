@@ -6,7 +6,13 @@ import { useMindmapStore } from './mindmapStore';
 interface AuthState {
   user: User | null;
   profile: any | null;
-  subscription: any | null;
+  subscription: {
+    status: 'free' | 'pro' | 'enterprise';
+    ai_usage_count: number;
+    ai_limit: number;
+    expires_at: string | null;
+    [key: string]: any;
+  } | null;
   loading: boolean;
   initialized: boolean;
   isAuthModalOpen: boolean;
@@ -17,6 +23,7 @@ interface AuthState {
   signOut: () => Promise<void>;
   fetchProfile: (userId: string) => Promise<void>;
   fetchSubscription: (userId: string) => Promise<void>;
+  updateAIUsage: (userId: string, increment?: number) => Promise<void>;
   setInitialized: (val: boolean) => void;
   initialize: () => Promise<void>;
 }
@@ -45,12 +52,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       // Get initial session
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
+      if (sessionError) throw sessionError;
+
       const user = session?.user ?? null;
       if (user) {
         set({ user });
-        await Promise.all([
+        // Use Promise.allSettled to prevent one failure from blocking others
+        // and handle potential AbortErrors or network issues gracefully
+        await Promise.allSettled([
           get().fetchProfile(user.id),
           get().fetchSubscription(user.id),
           useMindmapStore.getState().fetchUserMindmaps()
@@ -64,7 +75,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (user) {
             set({ user });
-            await Promise.all([
+            await Promise.allSettled([
               get().fetchProfile(user.id),
               get().fetchSubscription(user.id),
               useMindmapStore.getState().fetchUserMindmaps()
@@ -75,8 +86,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         }
       });
 
-    } catch (err) {
-      console.error('Auth initialization error:', err);
+    } catch (err: any) {
+      // Don't log AbortError as a full error since it's often normal during page navigation/refresh
+      if (err?.name !== 'AbortError') {
+        console.error('Auth initialization error:', err);
+      }
       // If failed, allow retry
       set({ initialized: false });
     } finally {
@@ -168,6 +182,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       .from('subscriptions')
       .select('*')
       .eq('user_id', userId)
+      .single();
+    
+    if (data) {
+      set({ subscription: data });
+    } else if (error && error.code === 'PGRST116') {
+      // No subscription found, might need to create a default one or handle as free
+      console.log('No subscription found for user, using default free tier');
+    }
+  },
+
+  updateAIUsage: async (userId: string, increment: number = 1) => {
+    if (!isSupabaseConfigured) return;
+    
+    const { data: currentSub } = await supabase
+      .from('subscriptions')
+      .select('ai_usage_count')
+      .eq('user_id', userId)
+      .single();
+    
+    const newCount = (currentSub?.ai_usage_count || 0) + increment;
+    
+    const { data, error } = await supabase
+      .from('subscriptions')
+      .update({ ai_usage_count: newCount })
+      .eq('user_id', userId)
+      .select()
       .single();
     
     if (data) set({ subscription: data });

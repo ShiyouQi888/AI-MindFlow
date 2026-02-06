@@ -1581,13 +1581,22 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   generateSubNodes: async (nodeId, customPrompt) => {
     const { mindmap, aiConfig, addNode, applyLayout } = get();
     
-    // Check if user is logged in
-    // Note: This is a store, so we check state via useAuthStore.getState()
-    const { user } = (await import('./authStore')).useAuthStore.getState();
+    // Check if user is logged in and subscription status
+    const authStore = (await import('./authStore')).useAuthStore.getState();
+    const { user, subscription } = authStore;
+    
     if (!user) {
       toast.error('请先登录以使用 AI 功能');
-      (await import('./authStore')).useAuthStore.getState().setAuthModalOpen(true);
+      authStore.setAuthModalOpen(true);
       return;
+    }
+
+    // Check AI usage limit
+    if (subscription) {
+      if (subscription.ai_usage_count >= subscription.ai_limit) {
+        toast.error(`已达到 AI 使用次数限制 (${subscription.ai_usage_count}/${subscription.ai_limit})。请升级订阅以继续使用。`);
+        return;
+      }
     }
 
     const node = mindmap.nodes[nodeId];
@@ -1714,6 +1723,11 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           applyLayout();
           set({ isAIProcessing: false, aiProgressMessage: '', aiProcessingNodeId: null });
           logActivity('ai_generate_success', { nodeId, nodeText: node.text });
+          
+          // Update AI usage count in background
+          if (user) {
+            authStore.updateAIUsage(user.id);
+          }
         }, 100);
       } else {
         set({ isAIProcessing: false, aiProgressMessage: '', aiProcessingNodeId: null });
