@@ -1,0 +1,8 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # 忽略以下环境变量的扫描，因为它们需要注入到前端代码中
+  # 注意：在 Netlify UI 中将这些变量标记为 "Secret" 会导致扫描器在构建产物中发现它们时报错
+  SECRETS_SCAN_OMIT_KEYS = "VITE_DEEPSEEK_MODEL,VITE_SUPABASE_URL,VITE_DEEPSEEK_API_KEY,VITE_DEEPSEEK_BASE_URL,VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY"
