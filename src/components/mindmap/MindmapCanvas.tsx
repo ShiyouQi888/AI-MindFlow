@@ -12,9 +12,7 @@ import InlineAIInput from './InlineAIInput';
 const MindmapCanvas: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const lastMouseDownNodeIdRef = useRef<string | null>(null);
-  const lastMouseDownTimeRef = useRef<number>(0);
-  
+
   const {
     mindmap,
     dragState,
@@ -640,6 +638,28 @@ const MindmapCanvas: React.FC = () => {
   }, [nodes, elements]);
 
   // Mouse handlers
+  const handleDoubleClick = useCallback((e: React.MouseEvent) => {
+    const node = getNodeAtPosition(e.clientX, e.clientY);
+    if (node) {
+      setEditingNode(node.id);
+      return;
+    }
+
+    const elementId = getElementAtPosition(e.clientX, e.clientY);
+    if (elementId) {
+      const el = elements[elementId];
+      if (el && el.type === 'text') {
+        setEditingElement(elementId);
+        return;
+      }
+    }
+
+    // Double click on canvas - organize and center
+    if (containerRef.current) {
+      organizeMindmap(containerRef.current.clientWidth, containerRef.current.clientHeight);
+    }
+  }, [getNodeAtPosition, getElementAtPosition, elements, setEditingNode, setEditingElement, organizeMindmap]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
     // Check if we clicked an input (the editor)
@@ -649,49 +669,18 @@ const MindmapCanvas: React.FC = () => {
     }
     
     const pos = clientToCanvas(e.clientX, e.clientY);
-    let node = getNodeAtPosition(e.clientX, e.clientY);
+    const node = getNodeAtPosition(e.clientX, e.clientY);
     const elementId = getElementAtPosition(e.clientX, e.clientY);
-
-    // Track double click more robustly to handle viewport movements from focusNode
-    const now = Date.now();
-    const isDoubleClick = e.detail >= 2 || (node && lastMouseDownNodeIdRef.current === node.id && now - lastMouseDownTimeRef.current < 400);
-    
-    // 1. Check for double click on node first (highest priority)
-    // Use either the currently hit node or the previously hit node if we're in a double-click sequence
-    const targetNodeId = node?.id || (isDoubleClick ? lastMouseDownNodeIdRef.current : null);
-    
-    if (targetNodeId && isDoubleClick) {
-      console.log('Double clicked node, opening editor:', targetNodeId);
-      setEditingNode(targetNodeId);
-      lastMouseDownNodeIdRef.current = null;
-      return;
-    }
 
     // If we clicked nothing and we're editing, close the editor
     if (!node && !elementId) {
-      if (e.detail === 2) {
-        // Double click on canvas - organize and center
-        if (containerRef.current) {
-          organizeMindmap(containerRef.current.clientWidth, containerRef.current.clientHeight);
-        }
-        return;
-      }
-
       if (inputDialog.isOpen) {
         setInputDialog(prev => ({ ...prev, isOpen: false }));
         return;
       }
     }
 
-    // Update refs for next click detection
-    if (node) {
-      lastMouseDownNodeIdRef.current = node.id;
-      lastMouseDownTimeRef.current = now;
-    } else {
-      lastMouseDownNodeIdRef.current = null;
-    }
-
-    // 2. Check for AI handle (prioritize over connection handles)
+    // 1. Check for AI handle (prioritize over connection handles)
     if (aiConfig.enabled) {
       const handleSize = 15 / viewport.zoom;
       for (const id of selectionState.selectedNodeIds) {
@@ -714,21 +703,23 @@ const MindmapCanvas: React.FC = () => {
       }
     }
 
-    // 3. Check for connection handle
+    // 2. Check for connection handle
     const connectionHandle = getConnectionHandleAtPosition(e.clientX, e.clientY);
     if (connectionHandle) {
       startDrag(connectionHandle.id, pos, 'connection', connectionHandle.handle);
       return;
     }
 
-    // 4. If a node is clicked (single click selection/dragging)
+    // 3. If a node is clicked (single click selection/dragging)
     if (node) {
       // At low zoom, prioritize node selection over handles to make it feel more sensitive
       const isLowZoom = viewport.zoom < 0.6;
+      const isAlreadySelected = selectionState.selectedNodeIds.includes(node.id);
+      
+      selectNode(node.id, e.shiftKey);
+      startDrag(node.id, pos, 'node');
+
       if (isLowZoom) {
-        const isAlreadySelected = selectionState.selectedNodeIds.includes(node.id);
-        selectNode(node.id, e.shiftKey);
-        startDrag(node.id, pos, 'node');
         if (!isAlreadySelected && containerRef.current) {
           focusNode(node.id, containerRef.current.clientWidth, containerRef.current.clientHeight);
         }
@@ -737,12 +728,7 @@ const MindmapCanvas: React.FC = () => {
       }
 
       // Normal zoom behavior
-      const isAlreadySelected = selectionState.selectedNodeIds.includes(node.id);
-      selectNode(node.id, e.shiftKey);
-      startDrag(node.id, pos, 'node');
-      
-      // Auto-zoom and center the node when clicked.
-      // Only focus if it wasn't already selected to avoid disrupting double-clicks
+      // Only focus if it wasn't already selected to avoid disrupting potential double-clicks
       if (!isAlreadySelected && (viewport.zoom < 1.1 || Object.keys(nodes).length > 10) && containerRef.current) {
         focusNode(node.id, containerRef.current.clientWidth, containerRef.current.clientHeight);
       }
@@ -1964,6 +1950,7 @@ const MindmapCanvas: React.FC = () => {
         className="absolute inset-0 cursor-crosshair"
         style={{ cursor: canvasState.isPanning ? 'grabbing' : dragState.isDragging ? 'move' : 'default' }}
         onMouseDown={handleMouseDown}
+        onDoubleClick={handleDoubleClick}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
