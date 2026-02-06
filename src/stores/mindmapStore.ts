@@ -1606,7 +1606,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     if (!node) return;
 
     if (!aiConfig.apiKey) {
-      toast.error('请先在右下角设置中配置 DeepSeek API Key');
+      toast.error('请先在用户中心 -> AI 设置中配置 DeepSeek API Key');
       return;
     }
 

@@ -15,14 +15,12 @@ import { toast } from 'sonner';
 import AuthModal from './AuthModal';
 import SubscriptionModal from './SubscriptionModal';
 import HelpGuideModal from '../mindmap/HelpGuideModal';
-import AISettings from '../mindmap/AISettings';
 import UserCenter from '../mindmap/UserCenter';
 
 const UserMenu: React.FC = () => {
   const { user, profile, subscription, signOut, loading, isAuthModalOpen, setAuthModalOpen } = useAuthStore();
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false);
-  const [isAISettingsOpen, setIsAISettingsOpen] = useState(false);
   const [isUserCenterOpen, setIsUserCenterOpen] = useState(false);
 
   if (loading) {
@@ -87,14 +85,6 @@ const UserMenu: React.FC = () => {
 
           <DropdownMenuItem 
             className="gap-2 cursor-pointer" 
-            onClick={() => setIsAISettingsOpen(true)}
-          >
-            <Bot className="w-4 h-4" />
-            <span>AI 设置</span>
-          </DropdownMenuItem>
-
-          <DropdownMenuItem 
-            className="gap-2 cursor-pointer" 
             onClick={() => setIsSubModalOpen(true)}
           >
             <Zap className="w-4 h-4 text-amber-500" />
@@ -120,7 +110,6 @@ const UserMenu: React.FC = () => {
       <AuthModal open={isAuthModalOpen} onOpenChange={setAuthModalOpen} />
       <SubscriptionModal open={isSubModalOpen} onOpenChange={setIsSubModalOpen} />
       <HelpGuideModal open={isHelpModalOpen} onOpenChange={setIsHelpModalOpen} />
-      <AISettings open={isAISettingsOpen} onOpenChange={setIsAISettingsOpen} />
       <UserCenter open={isUserCenterOpen} onOpenChange={setIsUserCenterOpen} />
     </>
   );

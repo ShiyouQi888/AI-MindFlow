@@ -32,7 +32,7 @@ const SubscriptionModal: React.FC<SubscriptionModalProps> = ({ open, onOpenChang
         '本地存储 (无限制)',
         '云端项目存储 (3个)',
         '标准质量导出 (PNG/JPG)',
-        'AI 节点生成 (20次/日)',
+        'AI 节点生成 (1次/日)',
       ],
       current: !isPro,
       buttonText: '当前方案',
