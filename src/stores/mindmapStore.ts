@@ -507,7 +507,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       isPanning: false,
       panStart: null,
     },
-    layoutConfig: DEFAULT_LAYOUT_CONFIG,
+    layoutConfig: {
+      ...DEFAULT_LAYOUT_CONFIG,
+      direction: 'both',
+    },
     editingNodeId: null,
     editingElementId: null,
     currentTool: 'select',
@@ -680,13 +683,11 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         } else if (layoutConfig.direction === 'left') {
           side = 'left';
         } else {
-          // 'both' direction: distribute evenly, prefer right side first
+          // 'both' direction (default or explicitly set)
+          // Distribute evenly, prefer right side first
           const leftCount = parent.children.filter(id => get().mindmap.nodes[id]?.side === 'left').length;
           const rightCount = parent.children.filter(id => get().mindmap.nodes[id]?.side === 'right').length;
           
-          // If we're adding a sibling (Enter key), we might want to stay on the same side
-          // but addNode doesn't know which node was selected. 
-          // However, if the user didn't provide explicitSide, we balance.
           side = rightCount <= leftCount ? 'right' : 'left';
         }
       } else {
@@ -703,23 +704,9 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       }
     }
 
-    // Ensure side is never undefined for children of root or deeper
-    if (!side && parent) {
-      const root = get().mindmap.nodes[get().mindmap.rootId];
-      if (root) {
-        // For direct children of root, use balancing or direction
-        if (parent.id === root.id) {
-           // This part is already handled above in the if (!side) { if (parent.parentId === null) ... } block
-        } else {
-           // Should have been handled by inheritance above
-        }
-      }
-    }
-
-    // If we added to a specific side, we should ensure layout is 'both' if it was root
-    // to allow both sides to exist
-    if (parent.parentId === null && side) {
-      if (layoutConfig.direction !== 'both' && layoutConfig.direction !== side) {
+    // Force bidirectional layout if we're adding to root and direction isn't already 'both'
+    if (parent.parentId === null) {
+      if (layoutConfig.direction !== 'both') {
         set((state) => ({
           layoutConfig: { ...state.layoutConfig, direction: 'both' }
         }));
