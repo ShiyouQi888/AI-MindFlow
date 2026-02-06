@@ -128,8 +128,6 @@ const createInitialMindmap = (): MindMap => {
   const child1Id = generateId();
   const child2Id = generateId();
   const child3Id = generateId();
-  const grandchild1Id = generateId();
-  const grandchild2Id = generateId();
   
   const calculateNodeWidth = (text: string, level: number) => {
     const baseWidth = level === 0 ? 40 : 32;
@@ -139,77 +137,53 @@ const createInitialMindmap = (): MindMap => {
 
   return {
     id: generateId(),
-    name: 'My Mind Map',
+    name: '使用帮助',
     rootId,
     nodes: {
       [rootId]: {
         id: rootId,
         parentId: null,
-        text: '中心主题',
+        text: '使用帮助',
         position: { x: 400, y: 300 },
         collapsed: false,
         children: [child1Id, child2Id, child3Id],
         level: 0,
-        width: calculateNodeWidth('中心主题', 0),
+        width: calculateNodeWidth('使用帮助', 0),
         height: 36,
       },
       [child1Id]: {
         id: child1Id,
         parentId: rootId,
-        text: '分支一',
-        position: { x: 600, y: 150 },
+        text: '添加子节点: Tab',
+        position: { x: 600, y: 200 },
         collapsed: false,
-        children: [grandchild1Id, grandchild2Id],
+        children: [],
         level: 1,
-        width: calculateNodeWidth('分支一', 1),
+        width: calculateNodeWidth('添加子节点: Tab', 1),
         height: 36,
         side: 'right',
       },
       [child2Id]: {
         id: child2Id,
         parentId: rootId,
-        text: '分支二',
+        text: '添加兄弟节点: Enter',
         position: { x: 600, y: 300 },
         collapsed: false,
         children: [],
         level: 1,
-        width: calculateNodeWidth('分支二', 1),
+        width: calculateNodeWidth('添加兄弟节点: Enter', 1),
         height: 36,
         side: 'right',
       },
       [child3Id]: {
         id: child3Id,
         parentId: rootId,
-        text: '分支三',
-        position: { x: 600, y: 450 },
+        text: '编辑节点文字: F2 或双击',
+        position: { x: 600, y: 400 },
         collapsed: false,
         children: [],
         level: 1,
-        width: calculateNodeWidth('分支三', 1),
-        height: 36,
-        side: 'right',
-      },
-      [grandchild1Id]: {
-        id: grandchild1Id,
-        parentId: child1Id,
-        text: '子节点 A',
-        position: { x: 800, y: 100 },
-        collapsed: false,
-        children: [],
-        level: 2,
-        width: calculateNodeWidth('子节点 A', 2),
-        height: 36,
-        side: 'right',
-      },
-      [grandchild2Id]: {
-        id: grandchild2Id,
-        parentId: child1Id,
-        text: '子节点 B',
-        position: { x: 800, y: 200 },
-        collapsed: false,
-        children: [],
-        level: 2,
-        width: calculateNodeWidth('子节点 B', 2),
+        width: calculateNodeWidth('编辑节点文字: F2 或双击', 1),
         height: 36,
         side: 'right',
       },
