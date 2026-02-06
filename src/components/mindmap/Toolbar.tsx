@@ -8,6 +8,7 @@ import {
   ZoomOut,
   Trash2,
   ChevronRight,
+  ChevronLeft,
   Download,
   Undo,
   Redo,
@@ -582,23 +583,13 @@ const Toolbar: React.FC = () => {
       {isRoot ? (
         <div className="flex gap-1">
           <ToolbarButton
-            icon={
-              <div className="relative flex items-center justify-center w-4 h-4">
-                <Plus className="w-4 h-4" />
-                <ArrowLeft className="w-2.5 h-2.5 absolute -left-1 -top-1 bg-background rounded-full p-0.5 shadow-sm" />
-              </div>
-            }
+            icon={<ChevronLeft className="w-4 h-4" />}
             tooltip="向左添加分支"
             onClick={() => handleAddChild('left')}
             disabled={!selectedId}
           />
           <ToolbarButton
-            icon={
-              <div className="relative flex items-center justify-center w-4 h-4">
-                <Plus className="w-4 h-4" />
-                <ArrowRight className="w-2.5 h-2.5 absolute -right-1 -top-1 bg-background rounded-full p-0.5 shadow-sm" />
-              </div>
-            }
+            icon={<ChevronRight className="w-4 h-4" />}
             tooltip="向右添加分支"
             onClick={() => handleAddChild('right')}
             disabled={!selectedId}

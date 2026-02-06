@@ -51,30 +51,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     try {
-      // Get initial session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError) throw sessionError;
-
-      const user = session?.user ?? null;
-      if (user) {
-        set({ user });
-        // Use Promise.allSettled to prevent one failure from blocking others
-        // and handle potential AbortErrors or network issues gracefully
-        await Promise.allSettled([
-          get().fetchProfile(user.id),
-          get().fetchSubscription(user.id),
-          useMindmapStore.getState().fetchUserMindmaps()
-        ]);
-      }
-
-      // Listen for auth changes
-      supabase.auth.onAuthStateChange(async (event, session) => {
+      // 1. First, set up the listener to ensure we don't miss any events (like SIGNED_IN after signIn call)
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         const user = session?.user ?? null;
         
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (user) {
-            set({ user });
+            set({ user, loading: false });
             await Promise.allSettled([
               get().fetchProfile(user.id),
               get().fetchSubscription(user.id),
@@ -82,16 +65,43 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             ]);
           }
         } else if (event === 'SIGNED_OUT') {
-          set({ user: null, profile: null, subscription: null });
+          set({ user: null, profile: null, subscription: null, loading: false });
+        } else if (event === 'INITIAL_SESSION') {
+          // Handle initial session if needed, but getSession usually handles this
+          if (user) {
+            set({ user, loading: false });
+          } else {
+            set({ loading: false });
+          }
         }
       });
 
+      // 2. Then get initial session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError) {
+        // Ignore AbortError for getSession as it's often caused by concurrent auth operations
+        if (sessionError.name !== 'AbortError') {
+          throw sessionError;
+        }
+      }
+
+      const user = session?.user ?? null;
+      if (user) {
+        set({ user });
+        await Promise.allSettled([
+          get().fetchProfile(user.id),
+          get().fetchSubscription(user.id),
+          useMindmapStore.getState().fetchUserMindmaps()
+        ]);
+      }
+
     } catch (err: any) {
-      // Don't log AbortError as a full error since it's often normal during page navigation/refresh
+      // Don't log AbortError as a full error
       if (err?.name !== 'AbortError') {
         console.error('Auth initialization error:', err);
       }
-      // If failed, allow retry
+      // On error, we might want to allow retry
       set({ initialized: false });
     } finally {
       set({ loading: false });
@@ -109,6 +119,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         email,
         password,
       });
+      
+      if (data?.user) {
+        set({ user: data.user });
+        // Fetch profile and subscription immediately
+        Promise.allSettled([
+          get().fetchProfile(data.user.id),
+          get().fetchSubscription(data.user.id),
+          useMindmapStore.getState().fetchUserMindmaps()
+        ]);
+      }
+      
       return { error };
     } else {
       // Magic link login (legacy)
@@ -140,8 +161,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     });
     
     if (!error && data.user) {
-      // Profile creation is handled by DB trigger, but we can also manually ensure it if needed
-      // or just wait for the auth state change to fetch it
+      // If auto-confirm is enabled, we might get a user immediately
+      if (data.session) {
+        set({ user: data.user });
+        Promise.allSettled([
+          get().fetchProfile(data.user.id),
+          get().fetchSubscription(data.user.id),
+          useMindmapStore.getState().fetchUserMindmaps()
+        ]);
+      }
     }
     
     return { error };

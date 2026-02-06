@@ -455,7 +455,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         .order('updated_at', { ascending: false });
 
       if (error) {
-        console.error('Failed to fetch mindmaps from Supabase:', error);
+        // Ignore AbortError as it's often caused by rapid navigation or auth state changes
+        if (error.name !== 'AbortError') {
+          console.error('Failed to fetch mindmaps from Supabase:', error);
+        }
         return;
       }
 

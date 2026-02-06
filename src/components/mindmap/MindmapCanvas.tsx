@@ -660,12 +660,6 @@ const MindmapCanvas: React.FC = () => {
         return;
       }
 
-      if (editingNodeId || editingElementId) {
-        setEditingNode(null);
-        setEditingElement(null);
-        return; 
-      }
-      
       if (inputDialog.isOpen) {
         setInputDialog(prev => ({ ...prev, isOpen: false }));
         return;
@@ -2306,9 +2300,13 @@ const NodeTextEditor: React.FC<NodeTextEditorProps> = ({ node, viewport, onSave,
   }, []);
   
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      e.stopPropagation();
       onSave(text);
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       onCancel();
     }
   };
@@ -2361,9 +2359,13 @@ const ElementTextEditor: React.FC<ElementTextEditorProps> = ({ element, viewport
   }, []);
   
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      e.stopPropagation();
       onSave(text);
     } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
       onCancel();
     }
   };
