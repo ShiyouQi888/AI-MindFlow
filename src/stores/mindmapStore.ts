@@ -125,10 +125,31 @@ interface MindmapStore {
 
 const createInitialMindmap = (): MindMap => {
   const rootId = generateId();
-  const child1Id = generateId();
-  const child2Id = generateId();
-  const child3Id = generateId();
+  const nodeOpsId = generateId();
+  const canvasOpsId = generateId();
+  const toolOpsId = generateId();
   
+  // Node Operation sub-nodes
+  const tabId = generateId();
+  const enterId = generateId();
+  const f2Id = generateId();
+  const delId = generateId();
+  const spaceId = generateId();
+  
+  // Canvas Operation sub-nodes
+  const escId = generateId();
+  const dblClickId = generateId();
+  const zoomId = generateId();
+  const panId = generateId();
+  const f11Id = generateId();
+
+  // Tool Operation sub-nodes
+  const vId = generateId();
+  const tId = generateId();
+  const iId = generateId();
+  const cId = generateId();
+  const pId = generateId();
+
   const calculateNodeWidth = (text: string, level: number) => {
     const baseWidth = level === 0 ? 40 : 32;
     const charWidth = level === 0 ? 16 : 14;
@@ -146,46 +167,229 @@ const createInitialMindmap = (): MindMap => {
         text: '使用帮助',
         position: { x: 400, y: 300 },
         collapsed: false,
-        children: [child1Id, child2Id, child3Id],
+        children: [nodeOpsId, canvasOpsId, toolOpsId],
         level: 0,
         width: calculateNodeWidth('使用帮助', 0),
         height: 36,
       },
-      [child1Id]: {
-        id: child1Id,
+      // Node Operations Group
+      [nodeOpsId]: {
+        id: nodeOpsId,
         parentId: rootId,
-        text: '添加子节点: Tab',
-        position: { x: 600, y: 200 },
+        text: '节点操作',
+        position: { x: 600, y: 150 },
         collapsed: false,
-        children: [],
+        children: [tabId, enterId, f2Id, delId, spaceId],
         level: 1,
-        width: calculateNodeWidth('添加子节点: Tab', 1),
+        width: calculateNodeWidth('节点操作', 1),
         height: 36,
         side: 'right',
       },
-      [child2Id]: {
-        id: child2Id,
-        parentId: rootId,
-        text: '添加兄弟节点: Enter',
-        position: { x: 600, y: 300 },
+      [tabId]: {
+        id: tabId,
+        parentId: nodeOpsId,
+        text: 'Tab: 添加子节点',
+        position: { x: 800, y: 50 },
         collapsed: false,
         children: [],
-        level: 1,
-        width: calculateNodeWidth('添加兄弟节点: Enter', 1),
+        level: 2,
+        width: calculateNodeWidth('Tab: 添加子节点', 2),
         height: 36,
         side: 'right',
       },
-      [child3Id]: {
-        id: child3Id,
-        parentId: rootId,
-        text: '编辑节点文字: F2 或双击',
-        position: { x: 600, y: 400 },
+      [enterId]: {
+        id: enterId,
+        parentId: nodeOpsId,
+        text: 'Enter: 添加兄弟节点',
+        position: { x: 800, y: 100 },
         collapsed: false,
         children: [],
-        level: 1,
-        width: calculateNodeWidth('编辑节点文字: F2 或双击', 1),
+        level: 2,
+        width: calculateNodeWidth('Enter: 添加兄弟节点', 2),
         height: 36,
         side: 'right',
+      },
+      [f2Id]: {
+        id: f2Id,
+        parentId: nodeOpsId,
+        text: 'F2 / 双击: 编辑节点',
+        position: { x: 800, y: 150 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('F2 / 双击: 编辑节点', 2),
+        height: 36,
+        side: 'right',
+      },
+      [delId]: {
+        id: delId,
+        parentId: nodeOpsId,
+        text: 'Del / Backspace: 删除',
+        position: { x: 800, y: 200 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('Del / Backspace: 删除', 2),
+        height: 36,
+        side: 'right',
+      },
+      [spaceId]: {
+        id: spaceId,
+        parentId: nodeOpsId,
+        text: 'Space: 折叠/展开',
+        position: { x: 800, y: 250 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('Space: 折叠/展开', 2),
+        height: 36,
+        side: 'right',
+      },
+      // Canvas Operations Group
+      [canvasOpsId]: {
+        id: canvasOpsId,
+        parentId: rootId,
+        text: '画布操作',
+        position: { x: 200, y: 200 },
+        collapsed: false,
+        children: [escId, dblClickId, zoomId, panId, f11Id],
+        level: 1,
+        width: calculateNodeWidth('画布操作', 1),
+        height: 36,
+        side: 'left',
+      },
+      [escId]: {
+        id: escId,
+        parentId: canvasOpsId,
+        text: 'Esc: 取消选择/退出',
+        position: { x: 0, y: 100 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('Esc: 取消选择/退出', 2),
+        height: 36,
+        side: 'left',
+      },
+      [dblClickId]: {
+        id: dblClickId,
+        parentId: canvasOpsId,
+        text: '双击空白: 自动整理',
+        position: { x: 0, y: 150 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('双击空白: 自动整理', 2),
+        height: 36,
+        side: 'left',
+      },
+      [zoomId]: {
+        id: zoomId,
+        parentId: canvasOpsId,
+        text: '滚轮: 缩放视图',
+        position: { x: 0, y: 200 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('滚轮: 缩放视图', 2),
+        height: 36,
+        side: 'left',
+      },
+      [panId]: {
+        id: panId,
+        parentId: canvasOpsId,
+        text: '右键/空格拖拽: 平移',
+        position: { x: 0, y: 250 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('右键/空格拖拽: 平移', 2),
+        height: 36,
+        side: 'left',
+      },
+      [f11Id]: {
+        id: f11Id,
+        parentId: canvasOpsId,
+        text: 'F11: 预览模式',
+        position: { x: 0, y: 300 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('F11: 预览模式', 2),
+        height: 36,
+        side: 'left',
+      },
+      // Tool Shortcuts Group
+      [toolOpsId]: {
+        id: toolOpsId,
+        parentId: rootId,
+        text: '工具快捷键',
+        position: { x: 200, y: 450 },
+        collapsed: false,
+        children: [vId, tId, iId, cId, pId],
+        level: 1,
+        width: calculateNodeWidth('工具快捷键', 1),
+        height: 36,
+        side: 'left',
+      },
+      [vId]: {
+        id: vId,
+        parentId: toolOpsId,
+        text: 'V: 选择工具',
+        position: { x: 0, y: 400 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('V: 选择工具', 2),
+        height: 36,
+        side: 'left',
+      },
+      [tId]: {
+        id: tId,
+        parentId: toolOpsId,
+        text: 'T: 插入文字',
+        position: { x: 0, y: 450 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('T: 插入文字', 2),
+        height: 36,
+        side: 'left',
+      },
+      [iId]: {
+        id: iId,
+        parentId: toolOpsId,
+        text: 'I: 插入图片',
+        position: { x: 0, y: 500 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('I: 插入图片', 2),
+        height: 36,
+        side: 'left',
+      },
+      [cId]: {
+        id: cId,
+        parentId: toolOpsId,
+        text: 'C: 曲线连接',
+        position: { x: 0, y: 550 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('C: 曲线连接', 2),
+        height: 36,
+        side: 'left',
+      },
+      [pId]: {
+        id: pId,
+        parentId: toolOpsId,
+        text: 'P: 折线连接',
+        position: { x: 0, y: 600 },
+        collapsed: false,
+        children: [],
+        level: 2,
+        width: calculateNodeWidth('P: 折线连接', 2),
+        height: 36,
+        side: 'left',
       },
     },
     elements: {},
