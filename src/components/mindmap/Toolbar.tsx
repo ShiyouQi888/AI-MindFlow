@@ -165,13 +165,34 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
     // 1. Calculate bounding box of all content
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
+    // Helper to check if a node is visible (all its ancestors are not collapsed)
+    const isNodeVisible = (nodeId: string): boolean => {
+      let currentId = nodeId;
+      while (currentId !== mindmap.rootId) {
+        const node = nodes[currentId];
+        if (!node) return false;
+        const parent = nodes[node.parentId!];
+        if (!parent || parent.collapsed) return false;
+        currentId = node.parentId!;
+      }
+      return true;
+    };
+
     nodeValues.forEach(node => {
-      const halfW = node.width / 2;
-      const halfH = node.height / 2;
-      minX = Math.min(minX, node.position.x - halfW);
-      minY = Math.min(minY, node.position.y - halfH);
-      maxX = Math.max(maxX, node.position.x + halfW);
-      maxY = Math.max(maxY, node.position.y + halfH);
+      // Only include visible nodes in the bounding box
+      if (node.id === mindmap.rootId || isNodeVisible(node.id)) {
+        const halfW = node.width / 2;
+        const halfH = node.height / 2;
+        minX = Math.min(minX, node.position.x - halfW);
+        minY = Math.min(minY, node.position.y - halfH);
+        maxX = Math.max(maxX, node.position.x + halfW);
+        maxY = Math.max(maxY, node.position.y + halfH);
+
+        // Include collapse indicator in the bounding box if it has children
+        if (node.children.length > 0) {
+          maxX = Math.max(maxX, node.position.x + halfW + 16); // 8px radius + some margin
+        }
+      }
     });
 
     elementValues.forEach(el => {
@@ -205,8 +226,8 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
       }
     });
 
-    // Add padding
-    const padding = 100;
+    // Add padding (reduced from 100 to 40 for a tighter fit)
+    const padding = 40;
     minX -= padding;
     minY -= padding;
     maxX += padding;
@@ -243,6 +264,9 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
     ctx.lineWidth = 2;
     nodeValues.forEach(node => {
       if (node.parentId) {
+        // Only draw connection if both node and parent are visible
+        if (!isNodeVisible(node.id)) return;
+        
         const parent = nodes[node.parentId];
         if (parent && !parent.collapsed) {
           const side = node.side || 'right';
@@ -282,34 +306,79 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
 
       // Source point
       if ('level' in source) { // Node
-        const side = source.side || 'right';
-        sX = source.position.x + (side === 'left' ? -source.width / 2 - 10 : source.width / 2 + 10);
-        sY = source.position.y;
+        const x = source.position.x;
+        const y = source.position.y;
+        const w = source.width;
+        const h = source.height;
+        const handle = conn.sourceHandle || (source.side === 'left' ? 'left' : 'right');
+
+        if (handle === 'top') { sX = x; sY = y - h / 2; }
+        else if (handle === 'bottom') { sX = x; sY = y + h / 2; }
+        else if (handle === 'left') { sX = x - w / 2; sY = y; }
+        else { sX = x + w / 2; sY = y; }
       } else { // Element
+        const x = source.position.x;
+        const y = source.position.y;
+        const w = source.width || 0;
+        const h = source.height || 0;
+        const handle = conn.sourceHandle || 'right';
+
+        const realX = w < 0 ? x + w : x;
+        const realY = h < 0 ? y + h : y;
+        const realW = Math.abs(w);
+        const realH = Math.abs(h);
+
         if (source.type === 'text') {
           const fontSize = source.style.fontSize || 16;
-          const textWidth = (source.text || '').length * fontSize * 0.6;
-          sX = source.position.x + textWidth + 10;
-          sY = source.position.y - fontSize / 2;
+          const width = (source.text || '').length * fontSize * 0.6;
+          if (handle === 'top') { sX = x + width / 2; sY = y - fontSize; }
+          else if (handle === 'bottom') { sX = x + width / 2; sY = y; }
+          else if (handle === 'left') { sX = x; sY = y - fontSize / 2; }
+          else { sX = x + width; sY = y - fontSize / 2; }
         } else {
-          sX = source.position.x + (source.width || 0) + 10;
-          sY = source.position.y + (source.height || 0) / 2;
+          if (handle === 'top') { sX = realX + realW / 2; sY = realY; }
+          else if (handle === 'bottom') { sX = realX + realW / 2; sY = realY + realH; }
+          else if (handle === 'left') { sX = realX; sY = realY + realH / 2; }
+          else { sX = realX + realW; sY = realY + realH / 2; }
         }
       }
 
       // Target point
       if ('level' in target) { // Node
-        tX = target.position.x;
-        tY = target.position.y;
+        const x = target.position.x;
+        const y = target.position.y;
+        const w = target.width;
+        const h = target.height;
+        const handle = conn.targetHandle || 'top';
+
+        if (handle === 'top') { tX = x; tY = y - h / 2; }
+        else if (handle === 'bottom') { tX = x; tY = y + h / 2; }
+        else if (handle === 'left') { tX = x - w / 2; tY = y; }
+        else { tX = x + w / 2; tY = y; }
       } else { // Element
+        const x = target.position.x;
+        const y = target.position.y;
+        const w = target.width || 0;
+        const h = target.height || 0;
+        const handle = conn.targetHandle || 'top';
+
+        const realX = w < 0 ? x + w : x;
+        const realY = h < 0 ? y + h : y;
+        const realW = Math.abs(w);
+        const realH = Math.abs(h);
+
         if (target.type === 'text') {
           const fontSize = target.style.fontSize || 16;
-          const textWidth = (target.text || '').length * fontSize * 0.6;
-          tX = target.position.x + textWidth / 2;
-          tY = target.position.y - fontSize / 2;
+          const width = (target.text || '').length * fontSize * 0.6;
+          if (handle === 'top') { tX = x + width / 2; tY = y - fontSize; }
+          else if (handle === 'bottom') { tX = x + width / 2; tY = y; }
+          else if (handle === 'left') { tX = x; tY = y - fontSize / 2; }
+          else { tX = x + width; tY = y - fontSize / 2; }
         } else {
-          tX = target.position.x + (target.width || 0) / 2;
-          tY = target.position.y + (target.height || 0) / 2;
+          if (handle === 'top') { tX = realX + realW / 2; tY = realY; }
+          else if (handle === 'bottom') { tX = realX + realW / 2; tY = realY + realH; }
+          else if (handle === 'left') { tX = realX; tY = realY + realH / 2; }
+          else { tX = realX + realW; tY = realY + realH / 2; }
         }
       }
 
@@ -321,11 +390,16 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
         const cp1x = sX + (tX - sX) * 0.5;
         const cp2x = sX + (tX - sX) * 0.5;
         ctx.bezierCurveTo(cp1x, sY, cp2x, tY, tX, tY);
+      } else if (connStyle === 'polyline') {
+        const midX = sX + (tX - sX) * 0.5;
+        ctx.lineTo(midX, sY);
+        ctx.lineTo(midX, tY);
+        ctx.lineTo(tX, tY);
       } else {
         ctx.lineTo(tX, tY);
       }
 
-      ctx.strokeStyle = conn.style.stroke || (theme === 'dark' ? '#3b82f6' : '#2563eb');
+      ctx.strokeStyle = conn.style.stroke || themeColors.connectionLine || (theme === 'dark' ? 'hsl(225, 20%, 30%)' : 'hsl(220, 20%, 70%)');
       ctx.lineWidth = conn.style.strokeWidth || 2;
       if (conn.style.dash) ctx.setLineDash(conn.style.dash);
       ctx.stroke();
@@ -397,7 +471,16 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
             if (img.complete && img.naturalWidth > 0) {
               const drawX = el.width < 0 ? el.position.x + el.width : el.position.x;
               const drawY = el.height < 0 ? el.position.y + el.height : el.position.y;
-              ctx.drawImage(img, drawX, drawY, Math.abs(el.width), Math.abs(el.height));
+              const drawW = Math.abs(el.width);
+              const drawH = Math.abs(el.height);
+              ctx.drawImage(img, drawX, drawY, drawW, drawH);
+              
+              // Draw border for image if set
+              if (el.style.strokeWidth && el.style.strokeWidth > 0) {
+                ctx.lineWidth = el.style.strokeWidth;
+                ctx.strokeStyle = el.style.stroke || (theme === 'dark' ? '#ffffff' : '#000000');
+                ctx.strokeRect(drawX, drawY, drawW, drawH);
+              }
             }
           }
           break;
@@ -407,6 +490,9 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
 
     // Draw Nodes
     nodeValues.forEach(node => {
+      // Only draw visible nodes
+      if (node.id !== mindmap.rootId && !isNodeVisible(node.id)) return;
+      
       const x = node.position.x - node.width / 2;
       const y = node.position.y - node.height / 2;
       const isRoot = node.id === mindmap.rootId;

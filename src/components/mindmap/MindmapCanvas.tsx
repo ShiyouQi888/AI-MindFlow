@@ -37,6 +37,7 @@ const MindmapCanvas: React.FC = () => {
     toggleCollapse,
     zoomIn,
     zoomOut,
+    zoomAt,
     currentTool,
     setCurrentTool,
     addElement,
@@ -202,7 +203,7 @@ const MindmapCanvas: React.FC = () => {
     // At low zoom, we want to be more "magnetic" and find the closest node
     // instead of just checking if the click is inside a box.
     const isLowZoom = viewport.zoom < 0.6;
-    const screenSpacePadding = isLowZoom ? 80 : 40; // Increased significantly for low zoom
+    const screenSpacePadding = isLowZoom ? 50 : 30; // Increased from 30/15 to 50/30
     const padding = screenSpacePadding / viewport.zoom;
     
     let closestNode: MindNode | null = null;
@@ -237,18 +238,19 @@ const MindmapCanvas: React.FC = () => {
     return closestNode;
   }, [nodes, clientToCanvas, viewport.zoom]);
   
+  // Utility for hit detection
+  const distToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+    const l2 = (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
+    if (l2 < 0.01) return Math.hypot(px - x1, py - y1);
+    let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+  };
+
   const getHoveredConnection = useCallback((clientX: number, clientY: number): string | null => {
     const pos = clientToCanvas(clientX, clientY);
     // Increased threshold for easier selection, especially at different zoom levels
     const threshold = 12 / viewport.zoom;
-
-    const distToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
-      const l2 = (x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2);
-      if (l2 < 0.01) return Math.hypot(px - x1, py - y1);
-      let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
-      t = Math.max(0, Math.min(1, t));
-      return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
-    };
 
     const checkConnection = (sX: number, sY: number, tX: number, tY: number, style: string): boolean => {
       if (style === 'curve') {
@@ -414,8 +416,8 @@ const MindmapCanvas: React.FC = () => {
 
     for (const el of elementList) {
       // Use the same screen-space padding logic as nodes for consistent clickability at low zoom
-      const screenSpacePadding = 25; 
-      const padding = Math.max(10, screenSpacePadding / viewport.zoom);
+      const screenSpacePadding = 15; 
+      const padding = screenSpacePadding / viewport.zoom;
       
       if (el.type === 'rect' || el.type === 'image' || el.type === 'video') {
         const x = el.position.x;
@@ -464,10 +466,21 @@ const MindmapCanvas: React.FC = () => {
         ) {
           return el.id;
         }
+      } else if (el.type === 'polyline' || el.type === 'curve') {
+        if (el.points && el.points.length > 1) {
+          const threshold = 15 / viewport.zoom;
+          for (let i = 0; i < el.points.length - 1; i++) {
+            const p1 = el.points[i];
+            const p2 = el.points[i+1];
+            if (distToSegment(pos.x, pos.y, p1.x, p1.y, p2.x, p2.y) < threshold) {
+              return el.id;
+            }
+          }
+        }
       }
     }
     return null;
-  }, [elements, clientToCanvas]);
+  }, [elements, clientToCanvas, viewport.zoom, distToSegment]);
 
   // Check if over a resize handle
   const getResizeHandleAtPosition = useCallback((clientX: number, clientY: number): { id: string, handle: string } | null => {
@@ -657,11 +670,8 @@ const MindmapCanvas: React.FC = () => {
       }
     }
 
-    // Double click on canvas - organize and center
-    if (containerRef.current) {
-      organizeMindmap(containerRef.current.clientWidth, containerRef.current.clientHeight);
-    }
-  }, [getNodeAtPosition, getElementAtPosition, elements, setEditingNode, setEditingElement, organizeMindmap]);
+    // Double click on canvas - organize and center (already handled in handleMouseDown for blank areas)
+  }, [getNodeAtPosition, getElementAtPosition, elements, setEditingNode, setEditingElement]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -731,8 +741,8 @@ const MindmapCanvas: React.FC = () => {
       }
 
       // Normal zoom behavior
-      // Only focus if it wasn't already selected to avoid disrupting potential double-clicks
-      if (!isAlreadySelected && (viewport.zoom < 1.1 || Object.keys(nodes).length > 10) && containerRef.current) {
+      // Always focus if clicked to improve responsiveness
+      if (containerRef.current) {
         focusNode(node.id, containerRef.current.clientWidth, containerRef.current.clientHeight);
       }
       
@@ -818,10 +828,15 @@ const MindmapCanvas: React.FC = () => {
       return;
     }
 
-    // Default behavior: clear selection and start panning
+    // Default behavior: clear selection and start panning or organize on double click
+    if (e.detail === 2 && containerRef.current) {
+      organizeMindmap(containerRef.current.clientWidth, containerRef.current.clientHeight);
+      return;
+    }
+
     clearSelection();
     startPan({ x: e.clientX, y: e.clientY });
-  }, [currentTool, addElement, getNodeAtPosition, getElementAtPosition, getResizeHandleAtPosition, selectNode, selectElement, selectConnection, clearSelection, startDrag, startPan, clientToCanvas, setEditingNode, setCurrentTool, colors, aiConfig.enabled, editingElementId, editingNodeId, elements, getConnectionHandleAtPosition, getHoveredConnection, inputDialog.isOpen, nodes, selectionState.selectedNodeIds, setEditingElement, viewport.zoom, focusNode]);
+  }, [currentTool, addElement, getNodeAtPosition, getElementAtPosition, getResizeHandleAtPosition, selectNode, selectElement, selectConnection, clearSelection, startDrag, startPan, clientToCanvas, setEditingNode, setCurrentTool, colors, aiConfig.enabled, editingElementId, editingNodeId, elements, getConnectionHandleAtPosition, getHoveredConnection, inputDialog.isOpen, nodes, selectionState.selectedNodeIds, setEditingElement, viewport.zoom, focusNode, organizeMindmap]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const pos = clientToCanvas(e.clientX, e.clientY);
@@ -1057,12 +1072,16 @@ const MindmapCanvas: React.FC = () => {
   
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    if (e.deltaY < 0) {
-      zoomIn();
-    } else {
-      zoomOut();
-    }
-  }, [zoomIn, zoomOut]);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const px = e.clientX - rect.left;
+    const py = e.clientY - rect.top;
+    
+    // Pass -deltaY to zoomAt for standard zoom direction (scroll up to zoom in)
+    zoomAt(-e.deltaY, px, py);
+  }, [zoomAt]);
   
   // Keyboard shortcuts
   useEffect(() => {
@@ -1298,7 +1317,7 @@ const MindmapCanvas: React.FC = () => {
         
         ctx.strokeStyle = isSelected || isHovered
           ? (colors.selection || colors.primary || '#3b82f6')
-          : (isNodeSelected ? (colors.selection || colors.primary || '#3b82f6') : (colors.connectionLine || 'hsl(225, 15%, 35%)'));
+          : (isNodeSelected ? (colors.selection || colors.primary || '#3b82f6') : (colors.connectionLine || (theme === 'dark' ? 'hsl(225, 20%, 30%)' : 'hsl(220, 20%, 70%)')));
         ctx.lineWidth = (isSelected || isHovered) ? 4 : (isNodeSelected ? 3 : 2);
         ctx.stroke();
         
@@ -1421,7 +1440,7 @@ const MindmapCanvas: React.FC = () => {
         ? (colors.selection || '#3b82f6')
         : isHovered 
           ? (colors.accent || '#10b981')
-          : (conn.style.stroke || colors.connectionLine || 'hsl(220, 20%, 70%)');
+          : (conn.style.stroke || colors.connectionLine || (theme === 'dark' ? 'hsl(225, 20%, 30%)' : 'hsl(220, 20%, 70%)'));
       
       // Much thicker when selected or hovered for better visibility
       ctx.lineWidth = isSelected 
@@ -1664,6 +1683,10 @@ const MindmapCanvas: React.FC = () => {
             if (cachedImage) {
               if (cachedImage.complete && cachedImage.naturalWidth > 0) {
                 ctx.drawImage(cachedImage, drawX, drawY, drawW, drawH);
+                // Draw border if stroke is set
+                if (el.style.strokeWidth && el.style.strokeWidth > 0) {
+                  ctx.strokeRect(drawX, drawY, drawW, drawH);
+                }
               } else {
                 // Image is still loading
                 ctx.strokeStyle = el.style.stroke || colors.primary || '#3b82f6';
@@ -1722,7 +1745,10 @@ const MindmapCanvas: React.FC = () => {
             // The actual video is rendered in the Overlay layer for better stability
             ctx.fillStyle = theme === 'dark' ? '#1f2937' : '#f3f4f6';
             ctx.fillRect(drawX, drawY, drawW, drawH);
-            ctx.strokeStyle = theme === 'dark' ? '#374151' : '#e5e7eb';
+            
+            // Use custom stroke if available, otherwise use theme default
+            ctx.strokeStyle = el.style.stroke || (theme === 'dark' ? '#374151' : '#e5e7eb');
+            ctx.lineWidth = el.style.strokeWidth || 1;
             ctx.strokeRect(drawX, drawY, drawW, drawH);
             
             ctx.fillStyle = theme === 'dark' ? '#9ca3af' : '#6b7280';
@@ -1936,9 +1962,9 @@ const MindmapCanvas: React.FC = () => {
     
     const resizeObserver = new ResizeObserver(() => {
       const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
+      if (canvas && container) {
+        canvas.width = container.clientWidth * window.devicePixelRatio;
+        canvas.height = container.clientHeight * window.devicePixelRatio;
       }
     });
     
@@ -1947,6 +1973,21 @@ const MindmapCanvas: React.FC = () => {
   }, []);
   
   const [globalAIInputOpen, setGlobalAIInputOpen] = useState(false);
+
+  // 处理全局 AI 生成
+  const handleGlobalAISubmit = useCallback((prompt: string) => {
+    if (prompt.trim()) {
+      // 重置画布并应用 AI 生成（覆盖模式）
+      resetAll();
+      
+      // 延迟一下确保状态重置完成
+      setTimeout(() => {
+        const currentRootId = useMindmapStore.getState().mindmap.rootId;
+        generateSubNodes(currentRootId, prompt, { replace: true });
+        setGlobalAIInputOpen(false);
+      }, 100);
+    }
+  }, [resetAll, generateSubNodes]);
 
   return (
     <div ref={containerRef} className="canvas-container w-full h-full">
@@ -1963,7 +2004,14 @@ const MindmapCanvas: React.FC = () => {
       />
       
       <Toolbar 
-        onOpenGlobalAI={() => setGlobalAIInputOpen(true)}
+        onOpenGlobalAI={() => {
+          if (!user) {
+            toast.error('请先登录以使用 AI 功能');
+            setAuthModalOpen(true);
+            return;
+          }
+          setGlobalAIInputOpen(true);
+        }}
       />
 
       <LeftToolbar />
@@ -2036,15 +2084,7 @@ const MindmapCanvas: React.FC = () => {
         title="AI 自动创建思维导图"
         type="ai"
         placeholder="输入您想创建的主题，例如：'生成一个关于如何学习 Python 的思维导图'"
-        onSubmit={(prompt) => {
-          if (prompt.trim()) {
-            // 重置画布并应用 AI 生成（覆盖模式）
-            resetAll();
-            const currentRootId = useMindmapStore.getState().mindmap.rootId;
-            generateSubNodes(currentRootId, prompt, { replace: true });
-            setGlobalAIInputOpen(false);
-          }
-        }}
+        onSubmit={handleGlobalAISubmit}
       />
 
       {aiInputState.isOpen && aiInputState.nodeId && nodes[aiInputState.nodeId] && (

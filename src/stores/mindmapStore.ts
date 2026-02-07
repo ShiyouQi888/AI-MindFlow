@@ -48,6 +48,7 @@ interface MindmapStore {
   editingElementId: string | null;
   currentTool: ToolType;
   isPreviewMode: boolean;
+  isFetching: boolean;
   
   // Actions
   setAIConfig: (config: Partial<AIConfig>) => void;
@@ -88,8 +89,9 @@ interface MindmapStore {
   updatePan: (position: Position) => void;
   endPan: () => void;
   setViewport: (viewport: Partial<Viewport>) => void;
-  zoomIn: () => void;
-  zoomOut: () => void;
+  zoomIn: (px?: number, py?: number) => void;
+  zoomOut: (px?: number, py?: number) => void;
+  zoomAt: (delta: number, px: number, py: number) => void;
   resetView: () => void;
   focusNode: (nodeId: string, canvasWidth: number, canvasHeight: number) => void;
   organizeMindmap: (canvasWidth?: number, canvasHeight?: number) => void;
@@ -145,6 +147,7 @@ const createEmptyMindmap = (): MindMap => {
     elements: {},
     connections: {},
     viewport: { x: 0, y: 0, zoom: 1 },
+    layoutConfig: { ...DEFAULT_LAYOUT_CONFIG, direction: 'both' },
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -422,6 +425,7 @@ const createInitialMindmap = (): MindMap => {
     elements: {},
     connections: {},
     viewport: { x: 0, y: 0, zoom: 1 },
+    layoutConfig: { ...DEFAULT_LAYOUT_CONFIG, direction: 'both' },
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -534,7 +538,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       isPanning: false,
       panStart: null,
     },
-    layoutConfig: {
+    layoutConfig: currentMindmap.layoutConfig || {
       ...DEFAULT_LAYOUT_CONFIG,
       direction: 'both',
     },
@@ -542,6 +546,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     editingElementId: null,
     currentTool: 'select',
     isPreviewMode: false,
+    isFetching: false,
     isAIProcessing: false,
     aiProgressMessage: '',
     aiProcessingNodeId: null,
@@ -596,6 +601,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         persistMindmap(updatedMindmap);
         return { 
           mindmap: updatedMindmap,
+          layoutConfig: updatedMindmap.layoutConfig || { ...DEFAULT_LAYOUT_CONFIG, direction: 'both' },
           savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
         };
       });
@@ -612,6 +618,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         const updatedMindmap = { ...mindmap, updatedAt: new Date() };
         set({ 
           mindmap: updatedMindmap,
+          layoutConfig: updatedMindmap.layoutConfig || { ...DEFAULT_LAYOUT_CONFIG, direction: 'both' },
           savedMindmaps: updateSavedList(updatedMindmap, savedMindmaps),
           selectionState: {
             selectedNodeIds: [],
@@ -659,41 +666,52 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     fetchUserMindmaps: async () => {
       if (!isSupabaseConfigured) return;
       const user = useAuthStore.getState().user;
-      if (!user) return;
+      if (!user || get().isFetching) return;
 
-      const { data, error } = await supabase
-        .from('mindmaps')
-        .select('data, updated_at')
-        .eq('user_id', user.id)
-        .order('updated_at', { ascending: false });
+      set({ isFetching: true });
 
-      if (error) {
-        // Ignore AbortError as it's often caused by rapid navigation or auth state changes
-        if (error.name !== 'AbortError') {
-          console.error('Failed to fetch mindmaps from Supabase:', error);
+      try {
+        const { data, error } = await supabase
+          .from('mindmaps')
+          .select('data, updated_at')
+          .eq('user_id', user.id)
+          .order('updated_at', { ascending: false });
+
+        if (error) {
+          // Check if it's an AbortError or a cancelled request
+          const isAbortError = 
+            error.name === 'AbortError' || 
+            error.message?.includes('AbortError') || 
+            error.hint?.includes('Request was aborted');
+            
+          if (!isAbortError) {
+            console.error('Failed to fetch mindmaps from Supabase:', error);
+          }
+          return;
         }
-        return;
-      }
 
-      if (data && data.length > 0) {
-        const mindmaps = data.map(item => item.data as MindMap);
-        const currentMindmap = get().mindmap;
-        
-        // If current mindmap is default and cloud has data, load the latest cloud one
-        const isDefault = currentMindmap.name === 'My Mind Map' && 
-                         Object.keys(currentMindmap.nodes).length <= 6; // Initial nodes count
-        
-        if (isDefault) {
-          set({ 
-            mindmap: mindmaps[0],
-            savedMindmaps: mindmaps 
-          });
-          localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(mindmaps[0]));
-        } else {
-          set({ savedMindmaps: mindmaps });
+        if (data && data.length > 0) {
+          const mindmaps = data.map(item => item.data as MindMap);
+          const currentMindmap = get().mindmap;
+          
+          // If current mindmap is default and cloud has data, load the latest cloud one
+          const isDefault = currentMindmap.name === '使用帮助' || 
+                           (currentMindmap.name === '未命名思维导图' && Object.keys(currentMindmap.nodes).length <= 1);
+          
+          if (isDefault) {
+            set({ 
+              mindmap: mindmaps[0],
+              savedMindmaps: mindmaps 
+            });
+            localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(mindmaps[0]));
+          } else {
+            set({ savedMindmaps: mindmaps });
+          }
+          
+          localStorage.setItem('aimindflow_saved_mindmaps', JSON.stringify(mindmaps));
         }
-        
-        localStorage.setItem('aimindflow_saved_mindmaps', JSON.stringify(mindmaps));
+      } finally {
+        set({ isFetching: false });
       }
     },
   
@@ -804,7 +822,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         const charWidth = level === 0 ? 16 : 14;
         const width = Math.max(level === 0 ? 120 : 80, text.length * charWidth + baseWidth);
 
-        const newMindmap = {
+        const updatedMindmap = {
           ...state.mindmap,
           nodes: {
             ...state.mindmap.nodes,
@@ -816,10 +834,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           },
           updatedAt: new Date(),
         };
-        persistMindmap(newMindmap);
+        persistMindmap(updatedMindmap);
         return { 
-          mindmap: newMindmap,
-          savedMindmaps: updateSavedList(newMindmap, state.savedMindmaps)
+          mindmap: updatedMindmap,
+          savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
         };
       });
       logActivity('update_node_text', { nodeId, oldText, newText: text });
@@ -868,100 +886,111 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   
   updateNodeStyle: (nodeId, style) => {
     set((state) => {
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          nodes: {
-            ...state.mindmap.nodes,
-            [nodeId]: {
-              ...state.mindmap.nodes[nodeId],
-              style: {
-                ...state.mindmap.nodes[nodeId]?.style,
-                ...style,
-              },
+      const updatedMindmap = {
+        ...state.mindmap,
+        nodes: {
+          ...state.mindmap.nodes,
+          [nodeId]: {
+            ...state.mindmap.nodes[nodeId],
+            style: {
+              ...state.mindmap.nodes[nodeId]?.style,
+              ...style,
             },
           },
-          updatedAt: new Date(),
         },
+        updatedAt: new Date(),
       };
-      persistMindmap(newState.mindmap);
-      return newState;
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
     });
   },
   
   deleteNode: (nodeId) => {
-    const { mindmap } = get();
-    const node = mindmap.nodes[nodeId];
-    
-    if (!node || node.id === mindmap.rootId) return;
-    
-    // Collect all descendant IDs
-    const collectDescendants = (id: string): string[] => {
-      const n = mindmap.nodes[id];
-      if (!n) return [id];
-      return [id, ...n.children.flatMap(collectDescendants)];
-    };
-    
-    const toDelete = new Set(collectDescendants(nodeId));
-    const newNodes = { ...mindmap.nodes };
-    
-    // Remove from parent
-    if (node.parentId && newNodes[node.parentId]) {
-      newNodes[node.parentId] = {
-        ...newNodes[node.parentId],
-        children: newNodes[node.parentId].children.filter((id) => id !== nodeId),
-      };
-    }
-    
-    // Delete all descendants
-    toDelete.forEach((id) => delete newNodes[id]);
-    
-    // Also delete any free connections that involve these nodes
-    const newConnections = { ...mindmap.connections };
-    Object.keys(newConnections).forEach(connId => {
-      const conn = newConnections[connId];
-      if (toDelete.has(conn.sourceId) || toDelete.has(conn.targetId)) {
-        delete newConnections[connId];
-      }
-    });
-    
+    // Use current nodes from state instead of stale get()
     set((state) => {
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          nodes: newNodes,
-          connections: newConnections,
-          updatedAt: new Date(),
-        },
+      const { mindmap } = state;
+      const node = mindmap.nodes[nodeId];
+      
+      if (!node || node.id === mindmap.rootId) return state;
+      
+      // Collect all descendant IDs
+      const collectDescendants = (id: string, currentNodes: Record<string, MindNode>): string[] => {
+        const n = currentNodes[id];
+        if (!n) return [id];
+        return [id, ...n.children.flatMap(childId => collectDescendants(childId, currentNodes))];
+      };
+      
+      const toDelete = new Set(collectDescendants(nodeId, mindmap.nodes));
+      const newNodes = { ...mindmap.nodes };
+      
+      // Remove from all potential parents' children arrays
+      Object.keys(newNodes).forEach(id => {
+        if (newNodes[id].children.includes(nodeId)) {
+          newNodes[id] = {
+            ...newNodes[id],
+            children: newNodes[id].children.filter(childId => childId !== nodeId)
+          };
+        }
+      });
+      
+      // Delete all descendants
+      toDelete.forEach((id) => delete newNodes[id]);
+      
+      // Also delete any free connections that involve these nodes
+      const newConnections = { ...mindmap.connections };
+      Object.keys(newConnections).forEach(connId => {
+        const conn = newConnections[connId];
+        if (toDelete.has(conn.sourceId) || toDelete.has(conn.targetId)) {
+          delete newConnections[connId];
+        }
+      });
+      
+      const updatedMindmap = {
+        ...mindmap,
+        nodes: newNodes,
+        connections: newConnections,
+        updatedAt: new Date(),
+      };
+      
+      persistMindmap(updatedMindmap);
+      
+      logActivity('delete_node', { nodeId, text: node.text, descendantsCount: toDelete.size });
+
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps),
         selectionState: {
           ...state.selectionState,
           selectedNodeIds: state.selectionState.selectedNodeIds.filter((id) => !toDelete.has(id)),
         },
       };
-      persistMindmap(newState.mindmap);
-      return newState;
     });
     
-    logActivity('delete_node', { nodeId, text: node.text, descendantsCount: toDelete.size });
+    // Apply layout after state update
     setTimeout(() => get().applyLayout(), 0);
   },
   
   toggleCollapse: (nodeId) => {
     set((state) => {
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          nodes: {
-            ...state.mindmap.nodes,
-            [nodeId]: {
-              ...state.mindmap.nodes[nodeId],
-              collapsed: !state.mindmap.nodes[nodeId].collapsed,
-            },
+      const updatedMindmap = {
+        ...state.mindmap,
+        nodes: {
+          ...state.mindmap.nodes,
+          [nodeId]: {
+            ...state.mindmap.nodes[nodeId],
+            collapsed: !state.mindmap.nodes[nodeId].collapsed,
           },
         },
+        updatedAt: new Date(),
       };
-      persistMindmap(newState.mindmap);
-      return newState;
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
     });
     
     setTimeout(() => get().applyLayout(), 0);
@@ -1240,28 +1269,41 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     }));
   },
   
-  zoomIn: () => {
-    set((state) => ({
-      mindmap: {
-        ...state.mindmap,
-        viewport: {
-          ...state.mindmap.viewport,
-          zoom: Math.min(2, state.mindmap.viewport.zoom + 0.1),
-        },
-      },
-    }));
+  zoomIn: (px, py) => {
+    const { canvasSize } = get();
+    const centerX = px !== undefined ? px : (canvasSize.width / 2 || window.innerWidth / 2);
+    const centerY = py !== undefined ? py : (canvasSize.height / 2 || window.innerHeight / 2);
+    get().zoomAt(100, centerX, centerY);
   },
   
-  zoomOut: () => {
-    set((state) => ({
-      mindmap: {
-        ...state.mindmap,
-        viewport: {
-          ...state.mindmap.viewport,
-          zoom: Math.max(0.25, state.mindmap.viewport.zoom - 0.1),
+  zoomOut: (px, py) => {
+    const { canvasSize } = get();
+    const centerX = px !== undefined ? px : (canvasSize.width / 2 || window.innerWidth / 2);
+    const centerY = py !== undefined ? py : (canvasSize.height / 2 || window.innerHeight / 2);
+    get().zoomAt(-100, centerX, centerY);
+  },
+
+  zoomAt: (delta, px, py) => {
+    set((state) => {
+      const { viewport } = state.mindmap;
+      // Use a more sensitive zoom factor for smoother experience
+      // Math.pow(1.001, delta) is a standard way to map scroll delta to zoom
+      const zoomFactor = Math.pow(1.001, delta);
+      const newZoom = Math.min(10, Math.max(0.05, viewport.zoom * zoomFactor));
+      
+      if (newZoom === viewport.zoom) return state;
+
+      // Calculate new offset to keep the point (px, py) fixed in screen space
+      const x = px - ((px - viewport.x) / viewport.zoom) * newZoom;
+      const y = py - ((py - viewport.y) / viewport.zoom) * newZoom;
+
+      return {
+        mindmap: {
+          ...state.mindmap,
+          viewport: { x, y, zoom: newZoom },
         },
-      },
-    }));
+      };
+    });
   },
   
   resetView: () => {
@@ -1278,10 +1320,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     const node = mindmap.nodes[nodeId];
     if (!node) return;
 
-    // Use a target zoom that is at least the current zoom if it's already reasonably high,
-    // otherwise zoom in to a comfortable reading level (1.1)
+    // Use a target zoom that is at least 1.2 for a clear focus, 
+    // but if the user is already zoomed in more, keep their zoom level.
     const currentZoom = mindmap.viewport.zoom;
-    const targetZoom = Math.max(currentZoom, 1.1);
+    const targetZoom = Math.max(currentZoom, 1.2);
     
     const targetVx = canvasWidth / 2 - node.position.x * targetZoom;
     const targetVy = canvasHeight / 2 - node.position.y * targetZoom;
@@ -1291,9 +1333,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     const startVy = mindmap.viewport.y;
     const startZoom = currentZoom;
     
-    // Adjust duration based on the "distance" of the zoom jump
-    const zoomDelta = Math.abs(targetZoom - startZoom);
-    const duration = zoomDelta > 0.5 ? 600 : 400; 
+    // Adjust duration for a snappier feel
+    const duration = 300; 
     
     const startTime = performance.now();
 
@@ -1356,18 +1397,29 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
     // Elements bounding box
     elementValues.forEach(el => {
-      const x = el.position.x;
-      const y = el.position.y;
-      const w = el.width || 0;
-      const h = el.height || 0;
-      const elMinX = w < 0 ? x + w : x;
-      const elMaxX = w < 0 ? x : x + w;
-      const elMinY = h < 0 ? y + h : y;
-      const elMaxY = h < 0 ? y : y + h;
-      minX = Math.min(minX, elMinX);
-      maxX = Math.max(maxX, elMaxX);
-      minY = Math.min(minY, elMinY);
-      maxY = Math.max(maxY, elMaxY);
+      if (el.type === 'polyline' || el.type === 'curve') {
+        if (el.points && el.points.length > 0) {
+          el.points.forEach(p => {
+            minX = Math.min(minX, p.x);
+            maxX = Math.max(maxX, p.x);
+            minY = Math.min(minY, p.y);
+            maxY = Math.max(maxY, p.y);
+          });
+        }
+      } else {
+        const x = el.position.x;
+        const y = el.position.y;
+        const w = el.width || 0;
+        const h = el.height || 0;
+        const elMinX = w < 0 ? x + w : x;
+        const elMaxX = w < 0 ? x : x + w;
+        const elMinY = h < 0 ? y + h : y;
+        const elMaxY = h < 0 ? y : y + h;
+        minX = Math.min(minX, elMinX);
+        maxX = Math.max(maxX, elMaxX);
+        minY = Math.min(minY, elMinY);
+        maxY = Math.max(maxY, elMaxY);
+      }
     });
 
     const contentWidth = Math.max(maxX - minX, 100);
@@ -1435,9 +1487,20 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
   
   setLayoutConfig: (config) => {
-    set((state) => ({
-      layoutConfig: { ...state.layoutConfig, ...config },
-    }));
+    set((state) => {
+      const newLayoutConfig = { ...state.layoutConfig, ...config };
+      const updatedMindmap = { 
+        ...state.mindmap, 
+        layoutConfig: newLayoutConfig,
+        updatedAt: new Date() 
+      };
+      persistMindmap(updatedMindmap);
+      return {
+        layoutConfig: newLayoutConfig,
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
+    });
   },
   
   applyLayout: () => {
@@ -1450,118 +1513,175 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     const newPositions: Record<string, Position> = {};
     const updatedNodes = { ...nodes };
 
+    // Helper to calculate total height of a subtree
+    const getSubtreeHeight = (nodeId: string): number => {
+      const node = updatedNodes[nodeId];
+      if (!node) return 0;
+      
+      // If collapsed, only return the node's height
+      if (node.collapsed || !node.children || node.children.length === 0) {
+        return node.height;
+      }
+      
+      const validChildren = node.children.filter(id => updatedNodes[id]);
+      if (validChildren.length === 0) return node.height;
+
+      // Sum of all children's subtrees + vertical spacing
+      const childrenTotalHeight = validChildren.reduce((acc, childId) => {
+        return acc + getSubtreeHeight(childId) + layoutConfig.verticalSpacing;
+      }, 0) - layoutConfig.verticalSpacing;
+      
+      // The height taken is the maximum of the node itself or its children block
+      return Math.max(node.height, childrenTotalHeight);
+    };
+
     // Tree layout algorithm
     const layoutSubtree = (nodeId: string, x: number, y: number, side: 'left' | 'right'): number => {
       const node = updatedNodes[nodeId];
       if (!node) return y;
       
-      newPositions[nodeId] = { x, y };
+      // If node has a custom position, respect it but still layout its children
+      if (node.isCustomPosition) {
+        newPositions[nodeId] = node.position;
+      } else {
+        newPositions[nodeId] = { x, y };
+      }
       
-      if (node.collapsed || node.children.length === 0) {
+      if (node.collapsed || !node.children || node.children.length === 0) {
         return y + node.height + layoutConfig.verticalSpacing;
       }
       
-      let currentY = y;
+      // Filter out invalid children before layout
+      const validChildren = node.children.filter(childId => updatedNodes[childId]);
+      if (validChildren.length === 0) {
+        return y + node.height + layoutConfig.verticalSpacing;
+      }
+
+      // Calculate total height of children to center them relative to parent
+      const childrenHeight = validChildren.reduce((acc, id) => {
+        return acc + getSubtreeHeight(id) + layoutConfig.verticalSpacing;
+      }, 0) - layoutConfig.verticalSpacing;
+
+      // Start Y for children should be centered relative to THIS node's resolved position
+      // This ensures children follow the parent even if the parent has a custom position
+      const resolvedPos = newPositions[nodeId];
+      let currentY = resolvedPos.y + node.height / 2 - childrenHeight / 2;
       
-      for (const childId of node.children) {
+      for (const childId of validChildren) {
         const childNode = updatedNodes[childId];
         if (!childNode) continue;
 
         let childX: number;
+        const currentPos = newPositions[nodeId];
         if (side === 'left') {
-          childX = x - ((node.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing;
+          childX = currentPos.x - ((node.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing;
         } else {
-          childX = x + ((node.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
+          childX = currentPos.x + ((node.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
         }
 
         currentY = layoutSubtree(childId, childX, currentY, side);
       }
       
-      // Center parent vertically among children
-      if (node.children.length > 0) {
-        const firstChildId = node.children[0];
-        const lastChildId = node.children[node.children.length - 1];
+      // Center parent vertically among valid children (only if it doesn't have a custom position)
+      if (validChildren.length > 0 && !node.isCustomPosition) {
+        const firstChildId = validChildren[0];
+        const lastChildId = validChildren[validChildren.length - 1];
         const firstChildY = newPositions[firstChildId]?.y ?? y;
-        const lastChildY = newPositions[lastChildId]?.y ?? y;
-        const lastChildHeight = updatedNodes[lastChildId]?.height ?? 0;
         
-        // Calculate the vertical center of the children's total height
-        const childrenCenterY = (firstChildY + (lastChildY + lastChildHeight)) / 2;
+        // Use the total subtree height of the last child to find the bottom boundary
+        const lastChildSubtreeHeight = getSubtreeHeight(lastChildId);
+        const lastChildY = newPositions[lastChildId]?.y ?? y;
+        
+        const childrenCenterY = (firstChildY + (lastChildY + updatedNodes[lastChildId]!.height)) / 2;
         newPositions[nodeId] = { x, y: childrenCenterY - node.height / 2 };
       }
       
-      return currentY;
+      // The return value should be the bottom of this entire subtree block
+      return y + getSubtreeHeight(nodeId) + layoutConfig.verticalSpacing;
     };
 
     // Initialize root position
     const centerX = 800; // Can be dynamic
     const centerY = 400;
-    newPositions[rootId] = { x: centerX, y: centerY - root.height / 2 };
+    
+    // Always use the existing root position if it's already there
+    // This helps preserve the mindmap's overall position on the canvas
+    if (root.position) {
+      newPositions[rootId] = root.position;
+    } else {
+      newPositions[rootId] = { x: centerX, y: centerY - root.height / 2 };
+    }
+
+    const rootPos = newPositions[rootId];
 
     if (layoutConfig.direction === 'both') {
-      const leftChildren = root.children.filter(id => nodes[id]?.side === 'left');
-      const rightChildren = root.children.filter(id => nodes[id]?.side === 'right');
+      const leftChildren = root.children.filter(id => nodes[id]?.side === 'left' && nodes[id]);
+      const rightChildren = root.children.filter(id => nodes[id]?.side === 'right' && nodes[id]);
 
       // Calculate total height for both sides to center them better
       const calculateTotalHeight = (childIds: string[]) => {
-        return childIds.reduce((acc, id) => {
-          const node = updatedNodes[id];
-          return acc + (node?.height || 40) + layoutConfig.verticalSpacing;
+        const validChildIds = childIds.filter(id => updatedNodes[id]);
+        if (validChildIds.length === 0) return 0;
+        return validChildIds.reduce((acc, id) => {
+          return acc + getSubtreeHeight(id) + layoutConfig.verticalSpacing;
         }, 0) - layoutConfig.verticalSpacing;
       };
 
       const leftTotalHeight = calculateTotalHeight(leftChildren);
       const rightTotalHeight = calculateTotalHeight(rightChildren);
 
-      let leftY = centerY - leftTotalHeight / 2;
-      let rightY = centerY - rightTotalHeight / 2;
+      let leftY = rootPos.y + root.height / 2 - leftTotalHeight / 2;
+      let rightY = rootPos.y + root.height / 2 - rightTotalHeight / 2;
 
       leftChildren.forEach(id => {
         const childNode = updatedNodes[id];
         if (!childNode) return;
-        const childX = centerX - ((root.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing;
+        const childX = rootPos.x - ((root.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing;
         leftY = layoutSubtree(id, childX, leftY, 'left');
       });
 
       rightChildren.forEach(id => {
         const childNode = updatedNodes[id];
         if (!childNode) return;
-        const childX = centerX + ((root.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
+        const childX = rootPos.x + ((root.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
         rightY = layoutSubtree(id, childX, rightY, 'right');
       });
     } else {
       const side = layoutConfig.direction === 'left' ? 'left' : 'right';
-      const totalHeight = root.children.reduce((acc, id) => {
-        const node = updatedNodes[id];
-        return acc + (node?.height || 40) + layoutConfig.verticalSpacing;
-      }, 0) - layoutConfig.verticalSpacing;
+      const validChildren = root.children.filter(id => updatedNodes[id]);
+      const totalHeight = validChildren.length > 0 
+        ? validChildren.reduce((acc, id) => {
+            return acc + getSubtreeHeight(id) + layoutConfig.verticalSpacing;
+          }, 0) - layoutConfig.verticalSpacing
+        : 0;
       
-      let currentY = centerY - totalHeight / 2;
-      root.children.forEach(id => {
+      let currentY = rootPos.y + root.height / 2 - totalHeight / 2;
+      validChildren.forEach(id => {
         const childNode = updatedNodes[id];
         if (!childNode) return;
         
         let childX: number;
         if (side === 'left') {
-          childX = centerX - ((root.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing;
+          childX = rootPos.x - ((root.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing;
         } else {
-          childX = centerX + ((root.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
+          childX = rootPos.x + ((root.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
         }
         
         currentY = layoutSubtree(id, childX, currentY, side);
       });
     }
 
-    // Center root vertically among all its children
-    if (root.children.length > 0) {
+    // Center root vertically among all its valid children (only if not custom position)
+    if (root.children.length > 0 && !root.isCustomPosition) {
       const childrenWithPos = root.children
+        .filter(id => updatedNodes[id])
         .map(id => ({ id, pos: newPositions[id], height: updatedNodes[id]?.height || 0 }))
         .filter(item => item.pos);
         
       if (childrenWithPos.length > 0) {
         const minY = Math.min(...childrenWithPos.map(item => item.pos!.y));
         const maxYWithHeight = Math.max(...childrenWithPos.map(item => item.pos!.y + item.height));
-        newPositions[rootId] = { x: centerX, y: (minY + maxYWithHeight) / 2 - root.height / 2 };
+        newPositions[rootId] = { x: rootPos.x, y: (minY + maxYWithHeight) / 2 - root.height / 2 };
       }
     }
     
@@ -1573,15 +1693,16 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     }
     
     set((state) => {
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          nodes: updatedNodes,
-          updatedAt: new Date(),
-        },
+      const updatedMindmap = {
+        ...state.mindmap,
+        nodes: updatedNodes,
+        updatedAt: new Date(),
       };
-      persistMindmap(newState.mindmap);
-      return newState;
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
     });
   },
 
@@ -1609,84 +1730,90 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     });
 
     set((state) => {
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          nodes: updatedNodes,
-          updatedAt: new Date(),
-        },
+      const updatedMindmap = {
+        ...state.mindmap,
+        nodes: updatedNodes,
+        updatedAt: new Date(),
       };
-      persistMindmap(newState.mindmap);
-      return newState;
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
     });
   },
 
   addElement: (element) => {
     const id = generateId();
     set((state) => {
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          elements: {
-            ...state.mindmap.elements,
-            [id]: { ...element, id } as CanvasElement,
-          },
-          updatedAt: new Date(),
+      const updatedMindmap = {
+        ...state.mindmap,
+        elements: {
+          ...state.mindmap.elements,
+          [id]: { ...element, id } as CanvasElement,
         },
+        updatedAt: new Date(),
       };
-      persistMindmap(newState.mindmap);
-      return newState;
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
     });
     return id;
   },
 
   updateElement: (id, element) => {
     set((state) => {
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          elements: {
-            ...state.mindmap.elements,
-            [id]: { ...state.mindmap.elements[id], ...element },
-          },
-          updatedAt: new Date(),
+      const updatedElement = { ...state.mindmap.elements[id], ...element };
+      const updatedMindmap = {
+        ...state.mindmap,
+        elements: {
+          ...state.mindmap.elements,
+          [id]: updatedElement,
         },
+        updatedAt: new Date(),
       };
-      persistMindmap(newState.mindmap);
-      return newState;
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
     });
   },
 
   deleteElement: (id) => {
     set((state) => {
       const { [id]: _, ...rest } = state.mindmap.elements;
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          elements: rest,
-          updatedAt: new Date(),
-        },
+      const updatedMindmap = {
+        ...state.mindmap,
+        elements: rest,
+        updatedAt: new Date(),
       };
-      persistMindmap(newState.mindmap);
-      return newState;
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
     });
   },
 
   addConnection: (connection) => {
     const id = generateId();
     set((state) => {
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          connections: {
-            ...state.mindmap.connections,
-            [id]: { ...connection, id },
-          },
-          updatedAt: new Date(),
+      const updatedMindmap = {
+        ...state.mindmap,
+        connections: {
+          ...state.mindmap.connections,
+          [id]: { ...connection, id },
         },
+        updatedAt: new Date(),
       };
-      persistMindmap(newState.mindmap);
-      return newState;
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
     });
     return id;
   },
@@ -1737,20 +1864,21 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
       // Handle free connection deletion
       const { [id]: _, ...rest } = state.mindmap.connections;
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          connections: rest,
-          updatedAt: new Date(),
-        },
+      const updatedMindmap = {
+        ...state.mindmap,
+        connections: rest,
+        updatedAt: new Date(),
+      };
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps),
         selectionState: {
           ...state.selectionState,
           selectedConnectionIds: state.selectionState.selectedConnectionIds.filter((connId) => connId !== id),
           hoveredConnectionId: state.selectionState.hoveredConnectionId === id ? null : state.selectionState.hoveredConnectionId,
         },
       };
-      persistMindmap(newState.mindmap);
-      return newState;
     });
     
     // Re-layout after removing parent-child relationship
@@ -1761,20 +1889,27 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
   updateNodePosition: (nodeId: string, position: Position) => {
     set((state) => {
-      const newState = {
-        mindmap: {
-          ...state.mindmap,
-          nodes: {
-            ...state.mindmap.nodes,
-            [nodeId]: {
-              ...state.mindmap.nodes[nodeId],
-              position,
-            },
+      const node = state.mindmap.nodes[nodeId];
+      if (!node) return state;
+
+      const updatedMindmap = {
+        ...state.mindmap,
+        nodes: {
+          ...state.mindmap.nodes,
+          [nodeId]: {
+            ...node,
+            position,
+            isCustomPosition: true,
           },
         },
+        updatedAt: new Date(),
       };
-      persistMindmap(newState.mindmap);
-      return newState;
+      
+      persistMindmap(updatedMindmap);
+      return {
+        mindmap: updatedMindmap,
+        savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
+      };
     });
   },
 

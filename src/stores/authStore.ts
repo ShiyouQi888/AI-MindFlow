@@ -81,7 +81,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       
       if (sessionError) {
         // Ignore AbortError for getSession as it's often caused by concurrent auth operations
-        if (sessionError.name !== 'AbortError') {
+        const isAbortError = 
+          sessionError.name === 'AbortError' || 
+          sessionError.message?.includes('AbortError') || 
+          sessionError.hint?.includes('Request was aborted');
+
+        if (!isAbortError) {
           throw sessionError;
         }
       }
@@ -98,7 +103,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     } catch (err: any) {
       // Don't log AbortError as a full error
-      if (err?.name !== 'AbortError') {
+      const isAbortError = 
+        err?.name === 'AbortError' || 
+        err?.message?.includes('AbortError') || 
+        err?.hint?.includes('Request was aborted');
+
+      if (!isAbortError) {
         console.error('Auth initialization error:', err);
       }
       // On error, we might want to allow retry

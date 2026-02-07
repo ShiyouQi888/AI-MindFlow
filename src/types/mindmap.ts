@@ -93,6 +93,7 @@ export interface MindNode {
   width: number;
   height: number;
   side?: 'left' | 'right';
+  isCustomPosition?: boolean;
 }
 
 export interface Viewport {
@@ -131,6 +132,7 @@ export interface MindMap {
   elements: Record<string, CanvasElement>;
   connections: Record<string, FreeConnection>;
   viewport: Viewport;
+  layoutConfig?: LayoutConfig;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -206,7 +206,7 @@ const StylePanel: React.FC = () => {
                 </div>
               </div>
 
-              {selectedElement.type !== 'text' && (
+              {selectedElement.type !== 'text' && selectedElement.type !== 'image' && selectedElement.type !== 'video' && (
                 <>
                   <Separator />
                   {/* Fill Color */}
@@ -295,17 +295,19 @@ const StylePanel: React.FC = () => {
                 <div className="space-y-2">
                   <label className="text-xs font-medium text-muted-foreground">粗细</label>
                   <div className="flex gap-1">
-                    {[1, 2, 4, 6].map((width) => (
+                    {[0, 1, 2, 4, 6].map((width) => (
                       <button
                         key={width}
                         className={`flex-1 py-1.5 text-xs rounded-lg transition-all ${
-                          currentStyle.strokeWidth === width || (!currentStyle.strokeWidth && width === 2)
+                          (currentStyle.strokeWidth === width) || 
+                          (currentStyle.strokeWidth === undefined && width === 2 && selectedElement.type !== 'image' && selectedElement.type !== 'video') ||
+                          (currentStyle.strokeWidth === undefined && width === 0 && (selectedElement.type === 'image' || selectedElement.type === 'video'))
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-secondary hover:bg-secondary/80'
                         }`}
                         onClick={() => handleStrokeWidthChange(width)}
                       >
-                        {width}px
+                        {width === 0 ? '无' : `${width}px`}
                       </button>
                     ))}
                   </div>
