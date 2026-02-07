@@ -124,6 +124,18 @@ export interface AIConfig {
   enabled: boolean;
 }
 
+export interface AIChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: number;
+}
+
+export interface AIChatState {
+  isOpen: boolean;
+  messages: AIChatMessage[];
+}
+
 export interface MindMap {
   id: string;
   name: string;
@@ -277,4 +289,16 @@ export const COLOR_PALETTES: ColorPalette[] = [
 
 export function getNodeColor(level: number): string {
   return NODE_COLORS[level % NODE_COLORS.length];
+}
+
+export interface AIChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+export interface AIChatState {
+  isOpen: boolean;
+  messages: AIChatMessage[];
 }

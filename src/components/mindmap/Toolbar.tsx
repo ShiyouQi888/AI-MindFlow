@@ -26,6 +26,7 @@ import {
   Image as ImageIcon,
   Sparkles,
   Eraser,
+  AlertTriangle,
 } from 'lucide-react';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { getNodeColor } from '@/types/mindmap';
@@ -45,7 +46,18 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import { encryptAMF, decryptAMF } from '@/utils/amfEncryption';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface ToolbarProps {
   onOpenGlobalAI?: () => void;
@@ -54,6 +66,7 @@ interface ToolbarProps {
 
 const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
   const { theme } = useTheme();
+  const [isClearDialogOpen, setIsClearDialogOpen] = React.useState(false);
   const {
     mindmap,
     selectionState,
@@ -73,6 +86,8 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
     deleteElement,
     deleteConnection,
     resetAll,
+    aiChatState,
+    setAIChatOpen,
   } = useMindmapStore();
 
   // Resolve theme colors for export
@@ -767,25 +782,49 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
       <Separator orientation="vertical" className="h-6 mx-1" />
 
       <ToolbarButton
-        icon={<Sparkles className="w-4 h-4 text-primary" />}
-        tooltip="AI 自动生成导图"
-        onClick={() => onOpenGlobalAI?.()}
+        icon={<Sparkles className={cn("w-4 h-4", aiChatState.isOpen ? "text-primary fill-primary/20" : "text-primary")} />}
+        tooltip="AI 助理"
+        onClick={() => setAIChatOpen(!aiChatState.isOpen)}
       />
 
       <ToolbarButton
         icon={<Eraser className="w-4 h-4 text-destructive" />}
         tooltip="清空画布"
-        onClick={() => {
-          if (window.confirm('确定要清空当前所有内容吗？')) {
-            resetAll();
-            setTimeout(() => {
-              applyLayout();
-              resetView();
-              onClearScreen?.();
-            }, 100);
-          }
-        }}
+        onClick={() => setIsClearDialogOpen(true)}
       />
+
+      <AlertDialog open={isClearDialogOpen} onOpenChange={setIsClearDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <div className="p-1.5 bg-destructive/10 rounded-lg">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              确定要清空画布吗？
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              这将删除当前画布上的所有节点、元素和连接。此操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                resetAll();
+                setTimeout(() => {
+                  applyLayout();
+                  resetView();
+                  onClearScreen?.();
+                }, 100);
+                toast.success("画布已清空");
+              }} 
+              className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+            >
+              确认清空
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       
       <Separator orientation="vertical" className="h-6 mx-1" />
 

@@ -28,11 +28,6 @@ import {
 } from '@/components/ui/popover';
 
 const StylePanel: React.FC = () => {
-  const [isMainCollapsed, setIsMainCollapsed] = React.useState(false);
-  const [isPaletteCollapsed, setIsPaletteCollapsed] = React.useState(false);
-  const [isNodeStyleCollapsed, setIsNodeStyleCollapsed] = React.useState(false);
-  const [isElementStyleCollapsed, setIsElementStyleCollapsed] = React.useState(false);
-
   const { 
     mindmap, 
     selectionState, 
@@ -41,7 +36,20 @@ const StylePanel: React.FC = () => {
     deleteElement,
     clearSelection,
     applyColorPalette,
+    aiChatState,
   } = useMindmapStore();
+
+  const [isMainCollapsed, setIsMainCollapsed] = React.useState(false);
+  const [isPaletteCollapsed, setIsPaletteCollapsed] = React.useState(false);
+  const [isNodeStyleCollapsed, setIsNodeStyleCollapsed] = React.useState(false);
+  const [isElementStyleCollapsed, setIsElementStyleCollapsed] = React.useState(false);
+
+  // 当 AI 助理打开时，自动折叠主面板
+  React.useEffect(() => {
+    if (aiChatState.isOpen) {
+      setIsMainCollapsed(true);
+    }
+  }, [aiChatState.isOpen]);
   
   const selectedNodeId = selectionState.selectedNodeIds[0];
   const selectedNode = selectedNodeId ? mindmap.nodes[selectedNodeId] : null;

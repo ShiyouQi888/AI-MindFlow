@@ -123,6 +123,13 @@ interface MindmapStore {
   isAIProcessing: boolean;
   aiProgressMessage: string;
   aiProcessingNodeId: string | null;
+
+  // AI Chat
+  aiChatState: AIChatState;
+  setAIChatOpen: (isOpen: boolean) => void;
+  addChatMessage: (message: Omit<AIChatMessage, 'id' | 'timestamp'>) => void;
+  clearChatHistory: () => void;
+  applyAIChatContent: (nodeId: string, content: string) => void;
 }
 
 const createEmptyMindmap = (): MindMap => {
@@ -550,9 +557,118 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     isAIProcessing: false,
     aiProgressMessage: '',
     aiProcessingNodeId: null,
+    aiChatState: {
+      isOpen: false,
+      messages: [],
+    },
     canvasSize: { width: 800, height: 600 },
     
     setCanvasSize: (width, height) => set({ canvasSize: { width, height } }),
+
+    setAIChatOpen: (isOpen) => set((state) => ({ 
+      aiChatState: { ...state.aiChatState, isOpen } 
+    })),
+
+    addChatMessage: (message) => set((state) => ({
+      aiChatState: {
+        ...state.aiChatState,
+        messages: [
+          ...state.aiChatState.messages,
+          {
+            ...message,
+            id: generateId(),
+            timestamp: Date.now(),
+          }
+        ]
+      }
+    })),
+
+    clearChatHistory: () => set((state) => ({
+      aiChatState: { ...state.aiChatState, messages: [] }
+    })),
+
+    applyAIChatContent: (nodeId, content) => {
+      const { addNode, updateNodeText, mindmap, applyLayout } = get();
+      const node = mindmap.nodes[nodeId];
+      if (!node) return;
+
+      const lines = content.split('\n').filter((line) => line.trim().length > 0);
+      
+      interface TempNode {
+        text: string;
+        indent: number;
+        children: TempNode[];
+      }
+
+      const rootNodes: TempNode[] = [];
+      const stack: TempNode[] = [];
+
+      lines.forEach((line) => {
+        // 识别列表项 (- text) 或 标题 (# text)
+        const listMatch = line.match(/^(\s*)([-*+]\s+|\d+\.\s+)(.*)/);
+        const headerMatch = line.match(/^(\s*)(#+)\s+(.*)/);
+        
+        if (!listMatch && !headerMatch) return;
+
+        let text = '';
+        let indent = 0;
+
+        if (listMatch) {
+          indent = listMatch[1].length;
+          text = listMatch[3].trim();
+        } else if (headerMatch) {
+          // 标题层级转换为缩进，# 为 0, ## 为 2, ### 为 4...
+          indent = (headerMatch[2].length - 1) * 2;
+          text = headerMatch[3].trim();
+        }
+        
+        // 彻底移除文本中的所有 Markdown 格式符号（加粗、斜体、行内代码、标题号等）
+        text = text
+          .replace(/\*\*/g, '')
+          .replace(/__/g, '')
+          .replace(/\*/g, '')
+          .replace(/_/g, '')
+          .replace(/`/g, '')
+          .replace(/#+/g, '')
+          .trim();
+
+        const newNode: TempNode = { text, indent, children: [] };
+
+        while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+          stack.pop();
+        }
+
+        if (stack.length === 0) {
+          rootNodes.push(newNode);
+        } else {
+          stack[stack.length - 1].children.push(newNode);
+        }
+        stack.push(newNode);
+      });
+
+      const addNodesRecursive = (pid: string, tempNodes: TempNode[]) => {
+        tempNodes.forEach(tempNode => {
+          const newNodeId = addNode(pid, tempNode.text);
+          if (tempNode.children.length > 0) {
+            addNodesRecursive(newNodeId, tempNode.children);
+          }
+        });
+      };
+
+      if (rootNodes.length > 0) {
+        // 如果只有一个根节点，则将其文本应用到当前选中的节点，并添加其子节点
+        if (rootNodes.length === 1) {
+          updateNodeText(nodeId, rootNodes[0].text);
+          addNodesRecursive(nodeId, rootNodes[0].children);
+        } else {
+          // 如果有多个根节点，则全部作为子节点添加到当前节点下
+          addNodesRecursive(nodeId, rootNodes);
+        }
+        
+        setTimeout(() => applyLayout(), 100);
+        toast.success('已应用 AI 生成的内容');
+      }
+    },
 
     resetAll: () => {
       const emptyMindmap = createEmptyMindmap();
@@ -824,6 +940,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
         const updatedMindmap = {
           ...state.mindmap,
+          // 如果更新的是根节点，同步更新项目名称
+          name: nodeId === state.mindmap.rootId ? text : state.mindmap.name,
           nodes: {
             ...state.mindmap.nodes,
             [nodeId]: {
@@ -847,9 +965,26 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   
   updateMindmapName: (name) => {
     set((state) => {
+      const rootId = state.mindmap.rootId;
+      const rootNode = state.mindmap.nodes[rootId];
+      
+      // 计算新的节点宽度
+      const baseWidth = 40; // 根节点 level 为 0
+      const charWidth = 16;
+      const width = Math.max(120, name.length * charWidth + baseWidth);
+      
       const newMindmap = {
         ...state.mindmap,
         name,
+        // 同时更新中心主题节点的文本和宽度
+        nodes: {
+          ...state.mindmap.nodes,
+          [rootId]: {
+            ...rootNode,
+            text: name,
+            width,
+          }
+        },
         updatedAt: new Date(),
       };
       persistMindmap(newMindmap);
@@ -858,6 +993,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         savedMindmaps: updateSavedList(newMindmap, state.savedMindmaps)
       };
     });
+    // 更新后重新计算布局
+    setTimeout(() => get().applyLayout(), 0);
   },
 
   createNewMindmap: () => {
@@ -1528,8 +1665,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
       // Sum of all children's subtrees + vertical spacing
       const childrenTotalHeight = validChildren.reduce((acc, childId) => {
-        return acc + getSubtreeHeight(childId) + layoutConfig.verticalSpacing;
-      }, 0) - layoutConfig.verticalSpacing;
+        return acc + getSubtreeHeight(childId);
+      }, 0) + (validChildren.length - 1) * layoutConfig.verticalSpacing;
       
       // The height taken is the maximum of the node itself or its children block
       return Math.max(node.height, childrenTotalHeight);
@@ -1540,32 +1677,27 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       const node = updatedNodes[nodeId];
       if (!node) return y;
       
+      const subtreeHeight = getSubtreeHeight(nodeId);
+      
       // If node has a custom position, respect it but still layout its children
       if (node.isCustomPosition) {
         newPositions[nodeId] = node.position;
       } else {
-        newPositions[nodeId] = { x, y };
+        newPositions[nodeId] = { x, y: y + subtreeHeight / 2 - node.height / 2 };
       }
       
       if (node.collapsed || !node.children || node.children.length === 0) {
-        return y + node.height + layoutConfig.verticalSpacing;
+        return y + subtreeHeight + layoutConfig.verticalSpacing;
       }
       
       // Filter out invalid children before layout
       const validChildren = node.children.filter(childId => updatedNodes[childId]);
       if (validChildren.length === 0) {
-        return y + node.height + layoutConfig.verticalSpacing;
+        return y + subtreeHeight + layoutConfig.verticalSpacing;
       }
 
-      // Calculate total height of children to center them relative to parent
-      const childrenHeight = validChildren.reduce((acc, id) => {
-        return acc + getSubtreeHeight(id) + layoutConfig.verticalSpacing;
-      }, 0) - layoutConfig.verticalSpacing;
-
-      // Start Y for children should be centered relative to THIS node's resolved position
-      // This ensures children follow the parent even if the parent has a custom position
-      const resolvedPos = newPositions[nodeId];
-      let currentY = resolvedPos.y + node.height / 2 - childrenHeight / 2;
+      // Start Y for children should be the same as this subtree's start Y
+      let currentY = y;
       
       for (const childId of validChildren) {
         const childNode = updatedNodes[childId];
@@ -1586,18 +1718,21 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       if (validChildren.length > 0 && !node.isCustomPosition) {
         const firstChildId = validChildren[0];
         const lastChildId = validChildren[validChildren.length - 1];
-        const firstChildY = newPositions[firstChildId]?.y ?? y;
         
-        // Use the total subtree height of the last child to find the bottom boundary
-        const lastChildSubtreeHeight = getSubtreeHeight(lastChildId);
-        const lastChildY = newPositions[lastChildId]?.y ?? y;
+        const firstChildPos = newPositions[firstChildId];
+        const lastChildPos = newPositions[lastChildId];
         
-        const childrenCenterY = (firstChildY + (lastChildY + updatedNodes[lastChildId]!.height)) / 2;
-        newPositions[nodeId] = { x, y: childrenCenterY - node.height / 2 };
+        if (firstChildPos && lastChildPos) {
+          const firstChildY = firstChildPos.y;
+          const lastChildY = lastChildPos.y;
+          const lastChildNodeHeight = updatedNodes[lastChildId]?.height || 0;
+          
+          const childrenCenterY = (firstChildY + (lastChildY + lastChildNodeHeight)) / 2;
+          newPositions[nodeId] = { x, y: childrenCenterY - node.height / 2 };
+        }
       }
       
-      // The return value should be the bottom of this entire subtree block
-      return y + getSubtreeHeight(nodeId) + layoutConfig.verticalSpacing;
+      return y + subtreeHeight + layoutConfig.verticalSpacing;
     };
 
     // Initialize root position
@@ -1623,8 +1758,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         const validChildIds = childIds.filter(id => updatedNodes[id]);
         if (validChildIds.length === 0) return 0;
         return validChildIds.reduce((acc, id) => {
-          return acc + getSubtreeHeight(id) + layoutConfig.verticalSpacing;
-        }, 0) - layoutConfig.verticalSpacing;
+          return acc + getSubtreeHeight(id);
+        }, 0) + (validChildIds.length - 1) * layoutConfig.verticalSpacing;
       };
 
       const leftTotalHeight = calculateTotalHeight(leftChildren);
@@ -1651,8 +1786,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       const validChildren = root.children.filter(id => updatedNodes[id]);
       const totalHeight = validChildren.length > 0 
         ? validChildren.reduce((acc, id) => {
-            return acc + getSubtreeHeight(id) + layoutConfig.verticalSpacing;
-          }, 0) - layoutConfig.verticalSpacing
+            return acc + getSubtreeHeight(id);
+          }, 0) + (validChildren.length - 1) * layoutConfig.verticalSpacing
         : 0;
       
       let currentY = rootPos.y + root.height / 2 - totalHeight / 2;
@@ -1930,7 +2065,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     // Check AI usage limit
     if (subscription) {
       if (subscription.status === 'free' && subscription.ai_usage_count >= 1) {
-        toast.error(`免费用户每天限用 1 次 AI 功能。请升级订阅以解锁无限次数。`);
+        toast.error('您已达到今日 AI 使用限额。请升级订阅以解锁无限次数。');
         return;
       }
     }

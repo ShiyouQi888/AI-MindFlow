@@ -5,6 +5,7 @@ import LeftToolbar from '@/components/mindmap/LeftToolbar';
 import HelpPanel from '@/components/mindmap/HelpPanel';
 import MiniMap from '@/components/mindmap/MiniMap';
 import StylePanel from '@/components/mindmap/StylePanel';
+import AIChatSidebar from '@/components/mindmap/AIChatSidebar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import ElectronTitleBar from '@/components/ElectronTitleBar';
 import UserMenu from '@/components/auth/UserMenu';
@@ -44,8 +45,22 @@ const Index: React.FC = () => {
     loadMindmap,
     deleteMindmap,
     isPreviewMode,
-    setPreviewMode
+    setPreviewMode,
+    aiChatState,
+    organizeMindmap,
+    canvasSize
   } = useMindmapStore();
+
+  // Handle AI Sidebar layout change
+  useEffect(() => {
+    if (!isPreviewMode) {
+      // Small delay to allow layout to settle
+      const timer = setTimeout(() => {
+        organizeMindmap(canvasSize.width, canvasSize.height);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [aiChatState.isOpen, organizeMindmap, isPreviewMode, canvasSize.width, canvasSize.height]);
   const { initialize: initializeAuth } = useAuthStore();
   const [isNewDialogOpen, setIsNewDialogOpen] = React.useState(false);
   const [mindmapToDelete, setMindmapToDelete] = React.useState<string | null>(null);
@@ -269,17 +284,21 @@ const Index: React.FC = () => {
       </AlertDialog>
       
       {/* Main Canvas Area */}
-      <main className="flex-1 relative">
-        <MindmapCanvas />
-        {!isPreviewMode && (
-          <>
-            <Toolbar />
-            <LeftToolbar />
-            <StylePanel />
-            <HelpPanel />
-            <MiniMap />
-          </>
-        )}
+      <main className="flex-1 relative flex overflow-hidden">
+        <div className="flex-1 relative overflow-hidden">
+          <MindmapCanvas />
+          {!isPreviewMode && (
+            <>
+              <Toolbar />
+              <LeftToolbar />
+              <StylePanel />
+              <HelpPanel />
+              <MiniMap />
+            </>
+          )}
+        </div>
+        
+        {!isPreviewMode && <AIChatSidebar />}
         
         {/* Exit Preview Button */}
         {isPreviewMode && (
