@@ -734,7 +734,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         const updatedMindmap = { ...mindmap, updatedAt: new Date() };
         set({ 
           mindmap: updatedMindmap,
-          layoutConfig: updatedMindmap.layoutConfig || { ...DEFAULT_LAYOUT_CONFIG, direction: 'both' },
+          layoutConfig: updatedMindmap.layoutConfig || { ...DEFAULT_LAYOUT_CONFIG, direction: 'right' },
           savedMindmaps: updateSavedList(updatedMindmap, savedMindmaps),
           selectionState: {
             selectedNodeIds: [],
@@ -868,14 +868,18 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           }
         }
       }
-    }
-
-    // Force bidirectional layout if we're adding to root and direction isn't already 'both'
-    if (parent.parentId === null) {
-      if (layoutConfig.direction !== 'both') {
-        set((state) => ({
-          layoutConfig: { ...state.layoutConfig, direction: 'both' }
-        }));
+    } else {
+      // If explicitSide is provided, automatically switch layout direction if needed
+      if (parent.parentId === null) {
+        if (explicitSide === 'left' && layoutConfig.direction === 'right') {
+          set((state) => ({
+            layoutConfig: { ...state.layoutConfig, direction: 'both' }
+          }));
+        } else if (explicitSide === 'right' && layoutConfig.direction === 'left') {
+          set((state) => ({
+            layoutConfig: { ...state.layoutConfig, direction: 'both' }
+          }));
+        }
       }
     }
 
