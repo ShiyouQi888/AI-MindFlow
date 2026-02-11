@@ -207,7 +207,7 @@ export interface LayoutConfig {
   connectionStyle: ConnectionStyle;
   horizontalSpacing: number;
   verticalSpacing: number;
-  direction: 'right' | 'left' | 'both';
+  direction: 'right' | 'left' | 'both' | 'down';
 }
 
 export const DEFAULT_LAYOUT_CONFIG: LayoutConfig = {

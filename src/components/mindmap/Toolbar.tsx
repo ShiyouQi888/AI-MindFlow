@@ -26,6 +26,7 @@ import {
   Image as ImageIcon,
   Sparkles,
   MessageSquareText,
+  Bot,
   Eraser,
   AlertTriangle,
   LayoutGrid,
@@ -129,7 +130,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
   };
 
   const handleToggleDirection = () => {
-    const directions: Array<'right' | 'left' | 'both'> = ['right', 'left', 'both'];
+    const directions: Array<'right' | 'left' | 'both' | 'down'> = ['right', 'left', 'both', 'down'];
     const currentIndex = directions.indexOf(layoutConfig.direction);
     const nextIndex = (currentIndex + 1) % directions.length;
     setLayoutConfig({ direction: directions[nextIndex] });
@@ -777,11 +778,13 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
          icon={
            layoutConfig.direction === 'right' ? <ArrowRight className="w-4 h-4" /> :
            layoutConfig.direction === 'left' ? <ArrowLeft className="w-4 h-4" /> :
+           layoutConfig.direction === 'down' ? <Layout className="w-4 h-4" /> :
            <ArrowLeftRight className="w-4 h-4" />
          }
          tooltip={`布局方向: ${
            layoutConfig.direction === 'right' ? '向右' :
-           layoutConfig.direction === 'left' ? '向左' : '双向'
+           layoutConfig.direction === 'left' ? '向左' : 
+           layoutConfig.direction === 'down' ? '向下' : '双向'
          }`}
          onClick={handleToggleDirection}
        />
@@ -803,7 +806,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
       <Separator orientation="vertical" className="h-6 mx-1" />
 
       <ToolbarButton
-        icon={<MessageSquareText className={cn("w-4 h-4", aiChatState.isOpen ? "text-primary fill-primary/20" : "text-primary")} />}
+        icon={<Bot className={cn("w-4 h-4", aiChatState.isOpen ? "text-primary fill-primary/20" : "text-primary")} />}
         tooltip="AI 助理"
         onClick={() => setAIChatOpen(!aiChatState.isOpen)}
       />

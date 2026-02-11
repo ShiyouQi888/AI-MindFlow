@@ -16,13 +16,10 @@ import {
   FreeConnection,
   AIConfig,
   CanvasElement,
+  AIChatState,
+  AIChatMessage,
+  ColorPalette,
 } from '@/types/mindmap';
-
-export interface ColorPalette {
-  name: string;
-  root: string;
-  levels: string[];
-}
 
 const generateId = () => Math.random().toString(36).substring(2, 11);
 
@@ -110,7 +107,7 @@ interface MindmapStore {
   
   // Layout
   setLayoutConfig: (config: Partial<LayoutConfig>) => void;
-  applyLayout: () => void;
+  applyLayout: (forceAll?: boolean) => void;
   
   // Theme
   applyColorPalette: (palette: ColorPalette) => void;
@@ -136,9 +133,11 @@ interface MindmapStore {
   // AI Chat
   aiChatState: AIChatState;
   setAIChatOpen: (isOpen: boolean) => void;
-  addChatMessage: (message: Omit<AIChatMessage, 'id' | 'timestamp'>) => void;
+  addChatMessage: (message: Omit<AIChatMessage, 'id' | 'timestamp'> & { id?: string }) => void;
   clearChatHistory: () => void;
+  updateChatMessage: (id: string, content: string) => void;
   applyAIChatContent: (nodeId: string, content: string, messageId?: string) => void;
+  setAIProcessing: (isProcessing: boolean) => void;
 }
 
 const createEmptyMindmap = (): MindMap => {
@@ -163,7 +162,7 @@ const createEmptyMindmap = (): MindMap => {
     elements: {},
     connections: {},
     viewport: { x: 0, y: 0, zoom: 1 },
-    layoutConfig: { ...DEFAULT_LAYOUT_CONFIG, direction: 'both' },
+    layoutConfig: { ...DEFAULT_LAYOUT_CONFIG, direction: 'right' },
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -450,6 +449,8 @@ const createInitialMindmap = (): MindMap => {
 import { toast } from "sonner";
 
 export const useMindmapStore = create<MindmapStore>((set, get) => {
+  let syncTimeout: any = null;
+
   // Load initial state from localStorage with error handling
   const getInitialState = () => {
     let currentMindmap: MindMap | null = null;
@@ -489,29 +490,43 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     return newList;
   };
 
-  const persistMindmap = async (mindmap: MindMap) => {
-    // Always save to localStorage for offline support/quick load
+  const persistMindmap = (mindmap: MindMap) => {
+    // 1. 立即同步到本地，确保本地数据始终是最新的
     localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(mindmap));
     
-    // Save to Supabase if logged in and configured
-    const user = useAuthStore.getState().user;
-    if (user && isSupabaseConfigured) {
-      try {
-        const { error } = await supabase
-          .from('mindmaps')
-          .upsert({
-            id: mindmap.id,
-            user_id: user.id,
-            name: mindmap.name,
-            data: mindmap,
-            updated_at: new Date().toISOString(),
-          });
-        
-        if (error) console.error('Failed to sync to Supabase:', error);
-      } catch (e) {
-        console.error('Supabase sync error:', e);
+    // 2. 防抖同步到 Supabase，减少高频操作（如 AI 生成、拖拽）时的网络请求压力
+    if (syncTimeout) clearTimeout(syncTimeout);
+    
+    syncTimeout = setTimeout(async () => {
+      const user = useAuthStore.getState().user;
+      if (user && isSupabaseConfigured) {
+        try {
+          const { error } = await supabase
+            .from('mindmaps')
+            .upsert({
+              id: mindmap.id,
+              user_id: user.id,
+              name: mindmap.name,
+              data: mindmap,
+              updated_at: new Date().toISOString(),
+            });
+          
+          if (error) {
+            // 忽略常见的 AbortError 或取消请求
+            if (error.message?.includes('aborted') || error.code === 'ABORTED') {
+              return;
+            }
+            console.error('Failed to sync to Supabase:', error);
+          }
+        } catch (e: any) {
+          // 忽略 fetch 取消导致的错误
+          if (e.name === 'AbortError' || e.message?.includes('aborted')) {
+            return;
+          }
+          console.error('Supabase sync error:', e);
+        }
       }
-    }
+    }, 2000); // 设置 2 秒防抖，平衡实时性与性能
   };
 
   const logActivity = async (action: string, details?: any) => {
@@ -556,7 +571,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     },
     layoutConfig: currentMindmap.layoutConfig || {
       ...DEFAULT_LAYOUT_CONFIG,
-      direction: 'both',
+      direction: 'right',
     },
     editingNodeId: null,
     editingElementId: null,
@@ -641,8 +656,9 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         messages: [
           ...state.aiChatState.messages,
           {
-            ...message,
-            id: generateId(),
+            id: message.id || generateId(),
+            role: message.role,
+            content: message.content,
             timestamp: Date.now(),
           }
         ]
@@ -652,6 +668,17 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     clearChatHistory: () => set((state) => ({
       aiChatState: { ...state.aiChatState, messages: [] }
     })),
+
+    updateChatMessage: (id, content) => set((state) => ({
+      aiChatState: {
+        ...state.aiChatState,
+        messages: state.aiChatState.messages.map(m => 
+          m.id === id ? { ...m, content } : m
+        )
+      }
+    })),
+
+    setAIProcessing: (isProcessing) => set({ isAIProcessing: isProcessing }),
 
     applyAIChatContent: (nodeId, content, messageId) => {
       get().saveHistory();
@@ -732,6 +759,31 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       };
 
       if (rootNodes.length > 0) {
+        // 启发式算法：如果子节点数量少于等于 6 个，或者包含明显的顺序/流程特征，则使用向右布局；如果包含纵向结构特征，则使用向下布局
+        let direction: 'right' | 'both' | 'down' = 'both';
+        
+        const sequenceKeywords = ['步骤', '阶段', '流程', '第一', '首先', '其次', '最后', '过程', '环节', '准备', '实施', '总结', '方案', '计划'];
+        const verticalKeywords = ['架构', '组织', '层级', '结构', '体系', '分解', '组成'];
+        
+        const hasSequence = rootNodes.some(node => 
+          sequenceKeywords.some(kw => node.text.toLowerCase().includes(kw)) || 
+          /^[0-9一二三四五六七八九十]+[\.、\s]/.test(node.text)
+        );
+
+        const hasVertical = rootNodes.some(node => 
+          verticalKeywords.some(kw => node.text.toLowerCase().includes(kw))
+        );
+        
+        if (hasVertical) {
+          direction = 'down';
+        } else if (rootNodes.length <= 6 || hasSequence) {
+          direction = 'right';
+        }
+        
+        set((state) => ({
+          layoutConfig: { ...state.layoutConfig, direction }
+        }));
+
         // 如果只有一个根节点，则将其文本应用到当前选中的节点，并添加其子节点
         if (rootNodes.length === 1) {
           updateNodeText(nodeId, rootNodes[0].text);
@@ -785,7 +837,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         isPreviewMode: false,
         layoutConfig: {
           ...DEFAULT_LAYOUT_CONFIG,
-          direction: 'both',
+          direction: 'right',
         },
       });
     },
@@ -814,7 +866,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         persistMindmap(updatedMindmap);
         return { 
           mindmap: updatedMindmap,
-          layoutConfig: updatedMindmap.layoutConfig || { ...DEFAULT_LAYOUT_CONFIG, direction: 'both' },
+          layoutConfig: updatedMindmap.layoutConfig || { ...DEFAULT_LAYOUT_CONFIG, direction: 'right' },
           savedMindmaps: updateSavedList(updatedMindmap, state.savedMindmaps)
         };
       });
@@ -1771,89 +1823,86 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       });
     }
 
-    // Helper to calculate total height of a subtree
+    // Helper to calculate total height/width of a subtree
     const getSubtreeHeight = (nodeId: string): number => {
       const node = updatedNodes[nodeId];
       if (!node) return 0;
-      
-      // If collapsed, only return the node's height
-      if (node.collapsed || !node.children || node.children.length === 0) {
-        return node.height;
-      }
-      
+      if (node.collapsed || !node.children || node.children.length === 0) return node.height;
       const validChildren = node.children.filter(id => updatedNodes[id]);
       if (validChildren.length === 0) return node.height;
-
-      // Sum of all children's subtrees + vertical spacing
-      const childrenTotalHeight = validChildren.reduce((acc, childId) => {
-        return acc + getSubtreeHeight(childId);
-      }, 0) + (validChildren.length - 1) * layoutConfig.verticalSpacing;
       
-      // The height taken is the maximum of the node itself or its children block
+      const spacing = layoutConfig.direction === 'down' ? 80 : layoutConfig.verticalSpacing;
+      const childrenTotalHeight = validChildren.reduce((acc, childId) => acc + getSubtreeHeight(childId), 0) + (validChildren.length - 1) * spacing;
       return Math.max(node.height, childrenTotalHeight);
     };
 
-    // Tree layout algorithm
-    const layoutSubtree = (nodeId: string, x: number, y: number, side: 'left' | 'right'): number => {
+    const getSubtreeWidth = (nodeId: string): number => {
+      const node = updatedNodes[nodeId];
+      if (!node) return 0;
+      if (node.collapsed || !node.children || node.children.length === 0) return node.width || 120;
+      const validChildren = node.children.filter(id => updatedNodes[id]);
+      if (validChildren.length === 0) return node.width || 120;
+      
+      const spacing = layoutConfig.direction === 'down' ? 40 : layoutConfig.horizontalSpacing;
+      const childrenTotalWidth = validChildren.reduce((acc, childId) => acc + getSubtreeWidth(childId), 0) + (validChildren.length - 1) * spacing;
+      return Math.max(node.width || 120, childrenTotalWidth);
+    };
+
+    // Tree layout algorithm (Horizontal)
+    const layoutSubtreeHorizontal = (nodeId: string, x: number, y: number, side: 'left' | 'right'): number => {
       const node = updatedNodes[nodeId];
       if (!node) return y;
-      
       const subtreeHeight = getSubtreeHeight(nodeId);
-      
-      // If node has a custom position, respect it but still layout its children
       if (node.isCustomPosition) {
         newPositions[nodeId] = node.position;
       } else {
-        // Unify coordinate system: node.position.y is the center of the node
         newPositions[nodeId] = { x, y: y + subtreeHeight / 2 };
       }
-      
-      if (node.collapsed || !node.children || node.children.length === 0) {
-        return y + subtreeHeight + layoutConfig.verticalSpacing;
-      }
-      
-      // Filter out invalid children before layout
+      if (node.collapsed || !node.children || node.children.length === 0) return y + subtreeHeight + layoutConfig.verticalSpacing;
       const validChildren = node.children.filter(childId => updatedNodes[childId]);
-      if (validChildren.length === 0) {
-        return y + subtreeHeight + layoutConfig.verticalSpacing;
-      }
-
-      // Start Y for children should be the same as this subtree's start Y
+      if (validChildren.length === 0) return y + subtreeHeight + layoutConfig.verticalSpacing;
       let currentY = y;
-      
       for (const childId of validChildren) {
         const childNode = updatedNodes[childId];
         if (!childNode) continue;
-
-        let childX: number;
-        const currentPos = newPositions[nodeId];
-        if (side === 'left') {
-          childX = currentPos.x - ((node.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing;
-        } else {
-          childX = currentPos.x + ((node.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
-        }
-
-        currentY = layoutSubtree(childId, childX, currentY, side);
+        const childX = side === 'left' 
+          ? newPositions[nodeId].x - ((node.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing
+          : newPositions[nodeId].x + ((node.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
+        currentY = layoutSubtreeHorizontal(childId, childX, currentY, side);
       }
-      
-      // Center parent vertically among valid children (only if it doesn't have a custom position)
       if (validChildren.length > 0 && !node.isCustomPosition) {
-        const firstChildId = validChildren[0];
-        const lastChildId = validChildren[validChildren.length - 1];
-        
-        const firstChildPos = newPositions[firstChildId];
-        const lastChildPos = newPositions[lastChildId];
-        
-        if (firstChildPos && lastChildPos) {
-          const firstChildY = firstChildPos.y;
-          const lastChildY = lastChildPos.y;
-          
-          const childrenCenterY = (firstChildY + lastChildY) / 2;
-          newPositions[nodeId] = { x, y: childrenCenterY };
-        }
+        const firstPos = newPositions[validChildren[0]], lastPos = newPositions[validChildren[validChildren.length - 1]];
+        if (firstPos && lastPos) newPositions[nodeId] = { x, y: (firstPos.y + lastPos.y) / 2 };
       }
-      
       return y + subtreeHeight + layoutConfig.verticalSpacing;
+    };
+
+    // Tree layout algorithm (Vertical - Down)
+    const layoutSubtreeVertical = (nodeId: string, x: number, y: number): number => {
+      const node = updatedNodes[nodeId];
+      if (!node) return x;
+      const subtreeWidth = getSubtreeWidth(nodeId);
+      const siblingSpacing = 40;
+      const parentChildSpacing = 80;
+
+      if (node.isCustomPosition) {
+        newPositions[nodeId] = node.position;
+      } else {
+        newPositions[nodeId] = { x: x + subtreeWidth / 2, y };
+      }
+      if (node.collapsed || !node.children || node.children.length === 0) return x + subtreeWidth + siblingSpacing;
+      const validChildren = node.children.filter(childId => updatedNodes[childId]);
+      if (validChildren.length === 0) return x + subtreeWidth + siblingSpacing;
+      let currentX = x;
+      const childY = newPositions[nodeId].y + (node.height || 36) / 2 + (updatedNodes[validChildren[0]]?.height || 36) / 2 + parentChildSpacing;
+      for (const childId of validChildren) {
+        currentX = layoutSubtreeVertical(childId, currentX, childY);
+      }
+      if (validChildren.length > 0 && !node.isCustomPosition) {
+        const firstPos = newPositions[validChildren[0]], lastPos = newPositions[validChildren[validChildren.length - 1]];
+        if (firstPos && lastPos) newPositions[nodeId] = { x: (firstPos.x + lastPos.x) / 2, y };
+      }
+      return x + subtreeWidth + siblingSpacing;
     };
 
     // Initialize root position
@@ -1874,13 +1923,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       const leftChildren = root.children.filter(id => nodes[id]?.side === 'left' && nodes[id]);
       const rightChildren = root.children.filter(id => nodes[id]?.side === 'right' && nodes[id]);
 
-      // Calculate total height for both sides to center them better
       const calculateTotalHeight = (childIds: string[]) => {
         const validChildIds = childIds.filter(id => updatedNodes[id]);
         if (validChildIds.length === 0) return 0;
-        return validChildIds.reduce((acc, id) => {
-          return acc + getSubtreeHeight(id);
-        }, 0) + (validChildIds.length - 1) * layoutConfig.verticalSpacing;
+        return validChildIds.reduce((acc, id) => acc + getSubtreeHeight(id), 0) + (validChildIds.length - 1) * layoutConfig.verticalSpacing;
       };
 
       const leftTotalHeight = calculateTotalHeight(leftChildren);
@@ -1893,41 +1939,48 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         const childNode = updatedNodes[id];
         if (!childNode) return;
         const childX = rootPos.x - ((root.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing;
-        leftY = layoutSubtree(id, childX, leftY, 'left');
+        leftY = layoutSubtreeHorizontal(id, childX, leftY, 'left');
       });
 
       rightChildren.forEach(id => {
         const childNode = updatedNodes[id];
         if (!childNode) return;
         const childX = rootPos.x + ((root.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
-        rightY = layoutSubtree(id, childX, rightY, 'right');
+        rightY = layoutSubtreeHorizontal(id, childX, rightY, 'right');
+      });
+    } else if (layoutConfig.direction === 'down') {
+      const validChildren = root.children.filter(id => updatedNodes[id]);
+      const siblingSpacing = 40;
+      const parentChildSpacing = 80;
+      const totalWidth = validChildren.length > 0 
+        ? validChildren.reduce((acc, id) => acc + getSubtreeWidth(id), 0) + (validChildren.length - 1) * siblingSpacing
+        : 0;
+      
+      let currentX = rootPos.x - totalWidth / 2;
+      const firstChildHeight = validChildren.length > 0 ? (updatedNodes[validChildren[0]]?.height || 36) : 36;
+      const childY = rootPos.y + (root.height || 36) / 2 + firstChildHeight / 2 + parentChildSpacing;
+      validChildren.forEach(id => {
+        currentX = layoutSubtreeVertical(id, currentX, childY);
       });
     } else {
       const side = layoutConfig.direction === 'left' ? 'left' : 'right';
       const validChildren = root.children.filter(id => updatedNodes[id]);
       const totalHeight = validChildren.length > 0 
-        ? validChildren.reduce((acc, id) => {
-            return acc + getSubtreeHeight(id);
-          }, 0) + (validChildren.length - 1) * layoutConfig.verticalSpacing
+        ? validChildren.reduce((acc, id) => acc + getSubtreeHeight(id), 0) + (validChildren.length - 1) * layoutConfig.verticalSpacing
         : 0;
       
       let currentY = rootPos.y - totalHeight / 2;
       validChildren.forEach(id => {
         const childNode = updatedNodes[id];
         if (!childNode) return;
-        
-        let childX: number;
-        if (side === 'left') {
-          childX = rootPos.x - ((root.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing;
-        } else {
-          childX = rootPos.x + ((root.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
-        }
-        
-        currentY = layoutSubtree(id, childX, currentY, side);
+        const childX = side === 'left' 
+          ? rootPos.x - ((root.width || 120) + (childNode.width || 120)) / 2 - layoutConfig.horizontalSpacing
+          : rootPos.x + ((root.width || 120) + (childNode.width || 120)) / 2 + layoutConfig.horizontalSpacing;
+        currentY = layoutSubtreeHorizontal(id, childX, currentY, side);
       });
     }
 
-    // Center root vertically among all its valid children (only if not custom position)
+    // Center root among all its valid children (only if not custom position)
     if (root.children.length > 0 && !root.isCustomPosition) {
       const childrenWithPos = root.children
         .filter(id => updatedNodes[id])
@@ -1935,9 +1988,15 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         .filter(item => item.pos);
         
       if (childrenWithPos.length > 0) {
-        const minY = Math.min(...childrenWithPos.map(item => item.pos!.y));
-        const maxY = Math.max(...childrenWithPos.map(item => item.pos!.y));
-        newPositions[rootId] = { x: rootPos.x, y: (minY + maxY) / 2 };
+        if (layoutConfig.direction === 'down') {
+          const minX = Math.min(...childrenWithPos.map(item => item.pos!.x));
+          const maxX = Math.max(...childrenWithPos.map(item => item.pos!.x));
+          newPositions[rootId] = { x: (minX + maxX) / 2, y: rootPos.y };
+        } else {
+          const minY = Math.min(...childrenWithPos.map(item => item.pos!.y));
+          const maxY = Math.max(...childrenWithPos.map(item => item.pos!.y));
+          newPositions[rootId] = { x: rootPos.x, y: (minY + maxY) / 2 };
+        }
       }
     }
     

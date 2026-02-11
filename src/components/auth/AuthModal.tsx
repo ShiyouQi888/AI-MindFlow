@@ -25,6 +25,8 @@ import {
 import { toast } from 'sonner';
 import SliderCaptcha from './SliderCaptcha';
 
+import logoImg from '@/assets/logo.png';
+
 interface AuthModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -97,7 +99,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
             
             <div className="flex flex-col items-center text-center space-y-6 animate-in fade-in zoom-in duration-700">
               <div className="w-24 h-24 bg-white rounded-3xl flex items-center justify-center shadow-xl p-3 transform hover:rotate-6 transition-transform duration-300">
-                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                <img src={logoImg} alt="Logo" className="w-full h-full object-contain" />
               </div>
               <div className="space-y-2">
                 <h2 className="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-br from-foreground to-foreground/50">
@@ -135,7 +137,7 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
             <div className="md:hidden flex flex-col items-center text-center mb-8">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-md p-1">
-                  <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+                  <img src={logoImg} alt="Logo" className="w-full h-full object-contain" />
                 </div>
                 <DialogTitle className="text-2xl font-bold tracking-tight">AI MindFlow</DialogTitle>
               </div>
@@ -265,6 +267,15 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
                     <div className="mt-6 space-y-4">
                       <SliderCaptcha onSuccess={() => setCaptchaPassed(true)} />
                       
+                      <div className="text-[10px] text-muted-foreground text-center space-y-1">
+                        <p>
+                          注册即代表您同意 
+                          <button type="button" className="text-primary hover:underline px-1">用户协议</button> 
+                          和 
+                          <button type="button" className="text-primary hover:underline px-1">隐私政策</button>
+                        </p>
+                      </div>
+
                       <Button 
                         type="submit" 
                         className="w-full h-11 shadow-lg shadow-primary/20 group" 
@@ -285,14 +296,20 @@ const AuthModal: React.FC<AuthModalProps> = ({ open, onOpenChange }) => {
               )}
             </div>
 
-            <div className="mt-auto pt-8 flex items-center justify-center gap-6">
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <ShieldCheck className="w-3 h-3 text-green-500" />
-                数据已加密
+            <div className="mt-auto pt-8 flex flex-col items-center gap-4">
+              <div className="flex items-center justify-center gap-6">
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <ShieldCheck className="w-3 h-3 text-green-500" />
+                  数据已加密
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                  <Zap className="w-3 h-3 text-amber-500" />
+                  云同步已开启
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                <Zap className="w-3 h-3 text-amber-500" />
-                云同步已开启
+              <div className="flex flex-col items-center text-[10px] text-muted-foreground/60 leading-relaxed">
+                <p>© 2024 AI MindFlow. All rights reserved.</p>
+                <p>作者: 齐世有 | 邮箱: shijuebaba@qq.com</p>
               </div>
             </div>
           </div>

@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, X, Sparkles, Trash2, Minimize2, Maximize2, MessageSquare, Bot, User, Wand2 } from 'lucide-react';
+import { Send, X, Sparkles, Trash2, Minimize2, Maximize2, MessageSquare, Bot, User, Wand2, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +26,9 @@ const AIChatSidebar: React.FC = () => {
     setAIChatOpen, 
     addChatMessage, 
     clearChatHistory, 
+    updateChatMessage,
     applyAIChatContent,
+    setAIProcessing,
     aiConfig,
     isAIProcessing,
     mindmap,
@@ -45,16 +50,18 @@ const AIChatSidebar: React.FC = () => {
     if (scrollRef.current) {
       const scrollArea = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
       if (scrollArea) {
-        // 使用 requestAnimationFrame 确保在 DOM 更新后滚动
+        // 流式更新时使用 instant 避免平滑滚动的抖动
+        const isStreaming = isAIProcessing && messages.length > 0 && messages[messages.length - 1].role === 'assistant';
+        
         requestAnimationFrame(() => {
           scrollArea.scrollTo({
             top: scrollArea.scrollHeight,
-            behavior: 'smooth'
+            behavior: isStreaming ? 'auto' : 'smooth'
           });
         });
       }
     }
-  }, [messages, isOpen]);
+  }, [messages, isOpen, isAIProcessing]);
 
   // Focus input when opened
   useEffect(() => {
@@ -83,6 +90,7 @@ const AIChatSidebar: React.FC = () => {
 
     const userPrompt = input.trim();
     setInput('');
+    setAIProcessing(true);
     
     // Add user message
     addChatMessage({
@@ -100,8 +108,6 @@ const AIChatSidebar: React.FC = () => {
     }
 
     try {
-      // Show thinking status in store if needed, or handle locally
-      // For simplicity, we'll just make the fetch call here
       const response = await fetch(`${aiConfig.baseUrl}/v1/chat/completions`, {
         method: 'POST',
         headers: {
@@ -119,25 +125,71 @@ const AIChatSidebar: React.FC = () => {
             { role: 'user', content: userPrompt }
           ],
           temperature: 0.7,
+          stream: true,
         }),
       });
 
-      const data = await response.json();
-      if (data.choices && data.choices[0].message.content) {
-        addChatMessage({
-          role: 'assistant',
-          content: data.choices[0].message.content
-        });
-        
-        // Update usage count
-        if (user) {
-          updateAIUsage(user.id);
-        }
-      } else {
-        throw new Error('Invalid AI response');
+      if (!response.ok) {
+        throw new Error('AI 响应失败');
       }
+
+      // 创建一个空的助手消息
+      const assistantMsgId = Math.random().toString(36).substring(2, 11);
+      addChatMessage({
+        id: assistantMsgId,
+        role: 'assistant',
+        content: ''
+      });
+      
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let assistantContent = '';
+      let lastUpdateTime = 0;
+      const UPDATE_INTERVAL = 50; // 50ms 刷新频率，减少闪烁
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (!trimmedLine || trimmedLine === 'data: [DONE]') continue;
+            
+            if (trimmedLine.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(trimmedLine.slice(6));
+                const content = data.choices[0]?.delta?.content || '';
+                if (content) {
+                  assistantContent += content;
+                  
+                  const now = Date.now();
+                  if (now - lastUpdateTime > UPDATE_INTERVAL) {
+                    updateChatMessage(assistantMsgId, assistantContent);
+                    lastUpdateTime = now;
+                  }
+                }
+              } catch (e) {
+                // 忽略解析错误
+              }
+            }
+          }
+        }
+        // 确保最后一次更新
+        updateChatMessage(assistantMsgId, assistantContent);
+      }
+
+      // 更新使用次数
+      if (user) {
+        updateAIUsage(user.id);
+      }
+      setAIProcessing(false);
     } catch (error) {
       console.error('AI Chat Error:', error);
+      setAIProcessing(false);
       toast.error('AI 响应失败，请稍后重试');
       addChatMessage({
         role: 'assistant',
@@ -159,50 +211,154 @@ const AIChatSidebar: React.FC = () => {
     return /^\s*([-*+]\s+|\d+\.\s+|#+\s+)/m.test(content);
   };
 
-  const getCleanText = (content: string) => {
-    // 1. 先移除代码块内容 (```...```)
-    let text = content.replace(/```[\s\S]*?```/g, '');
-
-    // 2. 按行处理，仅过滤掉结构化的列表行和标题行
-    const lines = text.split('\n');
-    const filteredLines = lines.map(line => {
-      const trimmed = line.trim();
-      
-      // 如果是列表项 (-, *, +, 1.) 或 标题 (#)，则该行在预览中不显示
-      if (/^\s*([-*+]\s+|\d+\.\s+|#+\s+)/.test(line)) {
-        return null;
-      }
-      
-      // 如果是分割线，不显示
-      if (/^[-*_]{3,}$/.test(trimmed)) {
-        return null;
-      }
-
-      // 保留其他所有普通文本行
-      return line;
-    }).filter(line => line !== null);
-
-    let cleanText = filteredLines.join('\n').trim();
-
-    // 3. 彻底移除预览文本中的所有 Markdown 格式符号（加粗、斜体、行内代码等）
-    cleanText = cleanText
-      .replace(/\*\*/g, '')
-      .replace(/__/g, '')
-      .replace(/\*/g, '')
-      .replace(/_/g, '')
-      .replace(/`/g, '');
-
-    // 如果过滤后为空，且原内容包含结构化数据，显示提示语
-    if (!cleanText && hasStructuredContent(content)) {
-      return "我已经为您规划好了思维导图结构，您可以点击下方按钮将其应用到画布中：";
-    }
-
-    return cleanText;
-  };
-
   const handleApplyContent = (content: string, messageId: string) => {
     const selectedNodeId = selectionState.selectedNodeIds[0] || mindmap.rootId;
     applyAIChatContent(selectedNodeId, content, messageId);
+  };
+
+  const MessageBubble: React.FC<{ msg: any; isStreaming?: boolean }> = ({ msg, isStreaming }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = () => {
+      navigator.clipboard.writeText(msg.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      toast.success('已复制到剪贴板');
+    };
+
+    const isUser = msg.role === 'user';
+
+    const markdownComponents = React.useMemo(() => ({
+      ul: ({ children }: any) => <ul className="list-disc pl-4 my-2 space-y-1">{children}</ul>,
+      ol: ({ children }: any) => <ol className="list-decimal pl-4 my-2 space-y-1">{children}</ol>,
+      li: ({ children }: any) => <li className="marker:text-primary/40 break-words">{children}</li>,
+      p: ({ children }: any) => <p className="mb-2 last:mb-0 leading-relaxed text-sm break-words whitespace-pre-wrap">{children}</p>,
+      code: ({ children, inline }: any) => (
+        inline 
+          ? <code className="bg-muted px-1.5 py-0.5 rounded text-[12px] font-mono text-primary break-all">{children}</code>
+          : <div className="relative my-2">
+              <pre className="bg-muted/50 p-3 rounded-lg overflow-x-auto custom-scrollbar">
+                <code className="text-[12px] font-mono text-foreground">{children}</code>
+              </pre>
+            </div>
+      ),
+      h1: ({ children }: any) => <h1 className="text-lg font-bold mb-2 mt-4 break-words">{children}</h1>,
+      h2: ({ children }: any) => <h2 className="text-md font-bold mb-2 mt-3 break-words">{children}</h2>,
+      h3: ({ children }: any) => <h3 className="text-sm font-bold mb-1 mt-2 break-words">{children}</h3>,
+      blockquote: ({ children }: any) => <blockquote className="border-l-4 border-primary/20 pl-3 italic my-2 text-muted-foreground break-words">{children}</blockquote>,
+    }), []);
+
+    return (
+      <motion.div 
+        // 仅对非流式消息开启布局动画，避免打字机过程中的抖动
+        layout={isStreaming ? false : "position"}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ 
+          duration: 0.25, 
+          ease: "easeOut",
+          // 流式更新时禁用布局过渡
+          layout: { duration: isStreaming ? 0 : 0.25 }
+        }}
+        className={cn(
+          "flex gap-3 w-full mb-6",
+          isUser ? "flex-row-reverse" : "flex-row"
+        )}
+      >
+        {/* Avatar */}
+        <div className={cn(
+          "w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 shadow-sm border transition-all duration-300",
+          isUser 
+            ? "bg-primary text-primary-foreground border-primary/20" 
+            : "bg-gradient-to-br from-violet-500/10 to-indigo-500/10 text-violet-600 border-violet-200/50"
+        )}>
+          {isUser ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
+        </div>
+
+        {/* Bubble Content */}
+        <div className={cn(
+          "flex flex-col gap-1.5 max-w-[85%] min-w-0",
+          isUser ? "items-end" : "items-start"
+        )}>
+          <div className={cn(
+            "relative group/msg px-4 py-3 rounded-2xl text-[13.5px] leading-relaxed shadow-sm w-full",
+            !isStreaming && "transition-all duration-300",
+            isUser 
+              ? "bg-primary text-primary-foreground rounded-tr-none shadow-primary/10" 
+              : "bg-card text-foreground rounded-tl-none border border-border/50 hover:border-primary/20 shadow-violet-500/5"
+          )}>
+            {/* Copy Button */}
+            <button
+              onClick={handleCopy}
+              className={cn(
+                "absolute -top-2 p-1.5 rounded-lg bg-background border border-border shadow-sm opacity-0 group-hover/msg:opacity-100 transition-all duration-200 hover:bg-muted z-10",
+                isUser ? "-left-8" : "-right-8"
+              )}
+              title="复制内容"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
+            </button>
+
+            {/* Message Body */}
+            <div className={cn(
+              "markdown-content prose prose-sm max-w-none dark:prose-invert break-words overflow-hidden",
+              isUser ? "prose-p:text-primary-foreground" : "prose-p:text-foreground"
+            )}>
+              {isUser ? (
+                <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+              ) : (
+                <div className="relative">
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={markdownComponents}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                  {isStreaming && (
+                    <motion.span
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: [0, 1, 0] }}
+                      transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+                      className="inline-block w-1.5 h-3.5 ml-1 bg-primary align-middle rounded-sm shadow-[0_0_8px_rgba(var(--primary),0.5)]"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+            
+            {/* AI Action Button - 仅在生成完成后显示，避免生成过程中的布局跳动 */}
+            {!isUser && !isStreaming && hasStructuredContent(msg.content) && (
+              <motion.div
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+              >
+                <Button
+                  size="sm"
+                  variant={msg.isApplied ? "ghost" : "secondary"}
+                  className={cn(
+                    "mt-4 w-full h-10 text-xs gap-2 transition-all shadow-md font-semibold rounded-xl border",
+                    msg.isApplied 
+                      ? "bg-muted text-muted-foreground border-transparent cursor-default" 
+                      : "bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20 text-primary hover:from-primary hover:to-primary hover:text-primary-foreground hover:shadow-primary/20"
+                  )}
+                  onClick={() => !msg.isApplied && handleApplyContent(msg.content, msg.id)}
+                  disabled={msg.isApplied}
+                >
+                  <Wand2 className={cn("w-4 h-4", !msg.isApplied && "animate-pulse")} />
+                  {msg.isApplied ? "方案已应用" : "应用方案到思维导图"}
+                </Button>
+              </motion.div>
+            )}
+          </div>
+          
+          {/* Timestamp */}
+          <span className="text-[10px] text-muted-foreground/40 px-1">
+            {new Date(msg.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+      </motion.div>
+    );
   };
 
   return (
@@ -289,48 +445,13 @@ const AIChatSidebar: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  {user && messages.map((msg) => (
-                    <div 
-                      key={msg.id} 
-                      className={cn(
-                        "flex gap-3",
-                        msg.role === 'user' ? "flex-row-reverse" : "flex-row"
-                      )}
-                    >
-                      <div className={cn(
-                        "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 shadow-sm border border-border/50",
-                        msg.role === 'user' ? "bg-primary text-primary-foreground" : "bg-card text-violet-600"
-                      )}>
-                        {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                      </div>
-                      <div className={cn(
-                        "max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed relative group/msg shadow-sm",
-                        msg.role === 'user' 
-                          ? "bg-primary text-primary-foreground rounded-tr-none" 
-                          : "bg-muted/50 text-foreground rounded-tl-none border border-border/30"
-                      )}>
-                        {msg.role === 'assistant' ? (getCleanText(msg.content) || msg.content) : msg.content}
-                        
-                        {msg.role === 'assistant' && hasStructuredContent(msg.content) && (
-                          <Button
-                            size="sm"
-                            variant={msg.isApplied ? "ghost" : "secondary"}
-                            className={cn(
-                              "mt-4 w-full h-10 text-xs gap-2 transition-all shadow-md font-semibold rounded-xl border",
-                              msg.isApplied 
-                                ? "bg-muted text-muted-foreground border-transparent cursor-default" 
-                                : "bg-background border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground"
-                            )}
-                            onClick={() => !msg.isApplied && handleApplyContent(msg.content, msg.id)}
-                            disabled={msg.isApplied}
-                          >
-                            <Wand2 className="w-4 h-4" />
-                            {msg.isApplied ? "方案已应用" : "应用方案到思维导图"}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                  <AnimatePresence initial={false}>
+                    {user && messages.map((msg, index) => {
+                      const isLast = index === messages.length - 1;
+                      const isStreaming = isLast && isAIProcessing && msg.role === 'assistant';
+                      return <MessageBubble key={msg.id} msg={msg} isStreaming={isStreaming} />;
+                    })}
+                  </AnimatePresence>
                 </div>
               </ScrollArea>
 

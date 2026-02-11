@@ -284,7 +284,7 @@ const MindmapCanvas: React.FC = () => {
 
       // Source point calculation
       if ('level' in source) {
-        const handle = conn.sourceHandle || (source.side === 'left' ? 'left' : 'right');
+        const handle = conn.sourceHandle || (layoutConfig.direction === 'down' ? 'bottom' : (source.side === 'left' ? 'left' : 'right'));
         if (handle === 'top') { sX = source.position.x; sY = source.position.y - source.height / 2; }
         else if (handle === 'bottom') { sX = source.position.x; sY = source.position.y + source.height / 2; }
         else if (handle === 'left') { sX = source.position.x - source.width / 2; sY = source.position.y; }
@@ -726,6 +726,7 @@ const MindmapCanvas: React.FC = () => {
     // 2.5 Check for "+" icon click to add child node
     const checkPlusClick = () => {
       const isRoot = (id: string) => nodes[id]?.parentId === null;
+      const isDown = layoutConfig.direction === 'down';
       
       for (const id of Object.keys(nodes)) {
         const n = nodes[id];
@@ -735,27 +736,39 @@ const MindmapCanvas: React.FC = () => {
         if (isSelected || isHovered) {
           const plusRadius = 12 / viewport.zoom;
           const plusGap = 20 / viewport.zoom;
-          const plusY = n.position.y;
           
-          // Check right side
-          if (isRoot(id) || n.side === 'right') {
-            const plusX = n.position.x + n.width / 2 + plusGap;
+          if (isDown) {
+            const plusX = n.position.x;
+            const plusY = n.position.y + n.height / 2 + plusGap;
             if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
-              const newId = addNode(id, undefined, 'right');
+              const newId = addNode(id, undefined);
               selectNode(newId);
               setTimeout(() => setEditingNode(newId), 50);
               return true;
             }
-          }
-          
-          // Check left side
-          if (isRoot(id) || n.side === 'left') {
-            const plusX = n.position.x - n.width / 2 - plusGap;
-            if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
-              const newId = addNode(id, undefined, 'left');
-              selectNode(newId);
-              setTimeout(() => setEditingNode(newId), 50);
-              return true;
+          } else {
+            // Check right side
+            if (isRoot(id) || n.side === 'right') {
+              const plusX = n.position.x + n.width / 2 + plusGap;
+              const plusY = n.position.y;
+              if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
+                const newId = addNode(id, undefined, 'right');
+                selectNode(newId);
+                setTimeout(() => setEditingNode(newId), 50);
+                return true;
+              }
+            }
+            
+            // Check left side
+            if (isRoot(id) || n.side === 'left') {
+              const plusX = n.position.x - n.width / 2 - plusGap;
+              const plusY = n.position.y;
+              if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
+                const newId = addNode(id, undefined, 'left');
+                selectNode(newId);
+                setTimeout(() => setEditingNode(newId), 50);
+                return true;
+              }
             }
           }
         }
@@ -764,6 +777,18 @@ const MindmapCanvas: React.FC = () => {
     };
 
     if (checkPlusClick()) return;
+
+    // 2.6 Check for collapse indicator click
+    if (node && node.children.length > 0) {
+      const indicatorX = node.position.x + node.width / 2 - 8;
+      const indicatorY = node.position.y;
+      const indicatorRadius = 12 / viewport.zoom; // Use zoom-adjusted hit area
+      
+      if (Math.hypot(pos.x - indicatorX, pos.y - indicatorY) < indicatorRadius) {
+        toggleCollapse(node.id);
+        return;
+      }
+    }
 
     // 3. If a node is clicked (single click selection/dragging)
     if (node) {
@@ -960,6 +985,7 @@ const MindmapCanvas: React.FC = () => {
           let isOverPlusHandle = false;
           const plusRadius = 12 / viewport.zoom;
           const plusGap = 20 / viewport.zoom;
+          const isDown = layoutConfig.direction === 'down';
 
           // Only check for selected or hovered node
           const nodesToCheck = new Set<string>();
@@ -970,23 +996,33 @@ const MindmapCanvas: React.FC = () => {
             const n = nodes[id];
             if (!n) continue;
             const isRoot = n.parentId === null;
-            const plusY = n.position.y;
             
-            // Check right side
-            if (isRoot || n.side === 'right') {
-              const plusX = n.position.x + n.width / 2 + plusGap;
+            if (isDown) {
+              const plusX = n.position.x;
+              const plusY = n.position.y + n.height / 2 + plusGap;
               if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
                 isOverPlusHandle = true;
                 break;
               }
-            }
-            
-            // Check left side
-            if (isRoot || n.side === 'left') {
-              const plusX = n.position.x - n.width / 2 - plusGap;
-              if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
-                isOverPlusHandle = true;
-                break;
+            } else {
+              const plusY = n.position.y;
+              
+              // Check right side
+              if (isRoot || n.side === 'right') {
+                const plusX = n.position.x + n.width / 2 + plusGap;
+                if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
+                  isOverPlusHandle = true;
+                  break;
+                }
+              }
+              
+              // Check left side
+              if (isRoot || n.side === 'left') {
+                const plusX = n.position.x - n.width / 2 - plusGap;
+                if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
+                  isOverPlusHandle = true;
+                  break;
+                }
               }
             }
           }
@@ -1363,11 +1399,21 @@ const MindmapCanvas: React.FC = () => {
         
         const isRoot = node.parentId === null;
         const side = child.side || 'right';
+        const isDown = layoutConfig.direction === 'down';
         
-        const startX = node.position.x + (side === 'left' ? -node.width / 2 : node.width / 2);
-        const endX = child.position.x + (side === 'left' ? child.width / 2 : -child.width / 2);
-        const startY = node.position.y;
-        const endY = child.position.y;
+        let startX: number, startY: number, endX: number, endY: number;
+        
+        if (isDown) {
+          startX = node.position.x;
+          startY = node.position.y + node.height / 2;
+          endX = child.position.x;
+          endY = child.position.y - child.height / 2;
+        } else {
+          startX = node.position.x + (side === 'left' ? -node.width / 2 : node.width / 2);
+          endX = child.position.x + (side === 'left' ? child.width / 2 : -child.width / 2);
+          startY = node.position.y;
+          endY = child.position.y;
+        }
         
         ctx.beginPath();
         ctx.moveTo(startX, startY);
@@ -1375,16 +1421,29 @@ const MindmapCanvas: React.FC = () => {
         const connStyle = layoutConfig.connectionStyle;
 
         if (connStyle === 'curve') {
-          const controlX1 = startX + (endX - startX) * 0.5;
-          const controlY1 = startY;
-          const controlX2 = startX + (endX - startX) * 0.5;
-          const controlY2 = endY;
-          ctx.bezierCurveTo(controlX1, controlY1, controlX2, controlY2, endX, endY);
+          if (isDown) {
+            const controlY1 = startY + (endY - startY) * 0.5;
+            const controlY2 = startY + (endY - startY) * 0.5;
+            ctx.bezierCurveTo(startX, controlY1, endX, controlY2, endX, endY);
+          } else {
+            const controlX1 = startX + (endX - startX) * 0.5;
+            const controlY1 = startY;
+            const controlX2 = startX + (endX - startX) * 0.5;
+            const controlY2 = endY;
+            ctx.bezierCurveTo(controlX1, controlY1, controlX2, controlY2, endX, endY);
+          }
         } else if (connStyle === 'polyline') {
-          const midX = startX + (endX - startX) * 0.5;
-          ctx.lineTo(midX, startY);
-          ctx.lineTo(midX, endY);
-          ctx.lineTo(endX, endY);
+          if (isDown) {
+            const midY = startY + (endY - startY) * 0.5;
+            ctx.lineTo(startX, midY);
+            ctx.lineTo(endX, midY);
+            ctx.lineTo(endX, endY);
+          } else {
+            const midX = startX + (endX - startX) * 0.5;
+            ctx.lineTo(midX, startY);
+            ctx.lineTo(midX, endY);
+            ctx.lineTo(endX, endY);
+          }
         } else {
           // straight
           ctx.lineTo(endX, endY);
@@ -1683,6 +1742,7 @@ const MindmapCanvas: React.FC = () => {
       if (isHovered || isSelected) {
         const plusRadius = 8 / viewport.zoom;
         const plusGap = 20 / viewport.zoom;
+        const isDown = layoutConfig.direction === 'down';
         
         // Helper to draw plus button
         const drawPlusButton = (px: number, py: number) => {
@@ -1703,18 +1763,24 @@ const MindmapCanvas: React.FC = () => {
           ctx.stroke();
         };
 
-        // Draw on right side if it's root or right-side node
-        if (isRoot || node.side === 'right') {
-          const plusX = x + node.width + plusGap;
-          const plusY = node.position.y;
+        if (isDown) {
+          const plusX = node.position.x;
+          const plusY = node.position.y + node.height / 2 + plusGap;
           drawPlusButton(plusX, plusY);
-        }
+        } else {
+          // Draw on right side if it's root or right-side node
+          if (isRoot || node.side === 'right') {
+            const plusX = x + node.width + plusGap;
+            const plusY = node.position.y;
+            drawPlusButton(plusX, plusY);
+          }
 
-        // Draw on left side if it's root or left-side node
-        if (isRoot || node.side === 'left') {
-          const plusX = x - plusGap;
-          const plusY = node.position.y;
-          drawPlusButton(plusX, plusY);
+          // Draw on left side if it's root or left-side node
+          if (isRoot || node.side === 'left') {
+            const plusX = x - plusGap;
+            const plusY = node.position.y;
+            drawPlusButton(plusX, plusY);
+          }
         }
       }
 
