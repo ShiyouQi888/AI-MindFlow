@@ -90,6 +90,9 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
     resetAll,
     aiChatState,
     setAIChatOpen,
+    undo,
+    redo,
+    history,
   } = useMindmapStore();
 
   // Resolve theme colors for export
@@ -732,6 +735,22 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
         tooltip="展开/折叠 (Space)"
         onClick={handleToggleCollapse}
         disabled={!hasChildren}
+      />
+      
+      <Separator orientation="vertical" className="h-6 mx-1" />
+
+      <ToolbarButton
+        icon={<Undo className="w-4 h-4" />}
+        tooltip="撤销 (Ctrl+Z)"
+        onClick={undo}
+        disabled={history.past.length === 0}
+      />
+
+      <ToolbarButton
+        icon={<Redo className="w-4 h-4" />}
+        tooltip="重做 (Ctrl+Y)"
+        onClick={redo}
+        disabled={history.future.length === 0}
       />
       
       <Separator orientation="vertical" className="h-6 mx-1" />

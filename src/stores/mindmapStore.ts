@@ -50,6 +50,15 @@ interface MindmapStore {
   isPreviewMode: boolean;
   isFetching: boolean;
   
+  // History
+  history: {
+    past: MindMap[];
+    future: MindMap[];
+  };
+  undo: () => void;
+  redo: () => void;
+  saveHistory: () => void;
+
   // Actions
   setAIConfig: (config: Partial<AIConfig>) => void;
   setMindmap: (mindmap: MindMap) => void;
@@ -129,7 +138,7 @@ interface MindmapStore {
   setAIChatOpen: (isOpen: boolean) => void;
   addChatMessage: (message: Omit<AIChatMessage, 'id' | 'timestamp'>) => void;
   clearChatHistory: () => void;
-  applyAIChatContent: (nodeId: string, content: string) => void;
+  applyAIChatContent: (nodeId: string, content: string, messageId?: string) => void;
 }
 
 const createEmptyMindmap = (): MindMap => {
@@ -563,6 +572,63 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     },
     canvasSize: { width: 800, height: 600 },
     
+    // History
+    history: {
+      past: [],
+      future: [],
+    },
+
+    saveHistory: () => {
+      const { mindmap, history } = get();
+      // 限制历史记录数量，避免内存占用过大
+      const MAX_HISTORY = 50;
+      const newPast = [JSON.parse(JSON.stringify(mindmap)), ...history.past].slice(0, MAX_HISTORY);
+      set({
+        history: {
+          past: newPast,
+          future: [], // 发生新操作时清空 future
+        }
+      });
+    },
+
+    undo: () => {
+      const { history, mindmap } = get();
+      if (history.past.length === 0) return;
+
+      const previous = history.past[0];
+      const newPast = history.past.slice(1);
+      const newFuture = [JSON.parse(JSON.stringify(mindmap)), ...history.future];
+
+      set({
+        mindmap: previous,
+        history: {
+          past: newPast,
+          future: newFuture,
+        }
+      });
+      persistMindmap(previous);
+      setTimeout(() => get().applyLayout(), 0);
+    },
+
+    redo: () => {
+      const { history, mindmap } = get();
+      if (history.future.length === 0) return;
+
+      const next = history.future[0];
+      const newFuture = history.future.slice(1);
+      const newPast = [JSON.parse(JSON.stringify(mindmap)), ...history.past];
+
+      set({
+        mindmap: next,
+        history: {
+          past: newPast,
+          future: newFuture,
+        }
+      });
+      persistMindmap(next);
+      setTimeout(() => get().applyLayout(), 0);
+    },
+    
     setCanvasSize: (width, height) => set({ canvasSize: { width, height } }),
 
     setAIChatOpen: (isOpen) => set((state) => ({ 
@@ -587,10 +653,20 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       aiChatState: { ...state.aiChatState, messages: [] }
     })),
 
-    applyAIChatContent: (nodeId, content) => {
+    applyAIChatContent: (nodeId, content, messageId) => {
+      get().saveHistory();
       const { addNode, updateNodeText, mindmap, applyLayout } = get();
       const node = mindmap.nodes[nodeId];
       if (!node) return;
+
+      // 如果提供了 messageId，先检查该消息是否已应用
+      if (messageId) {
+        const message = get().aiChatState.messages.find(m => m.id === messageId);
+        if (message?.isApplied) {
+          toast.error('该方案已应用，请勿重复操作');
+          return;
+        }
+      }
 
       const lines = content.split('\n').filter((line) => line.trim().length > 0);
       
@@ -659,6 +735,12 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         // 如果只有一个根节点，则将其文本应用到当前选中的节点，并添加其子节点
         if (rootNodes.length === 1) {
           updateNodeText(nodeId, rootNodes[0].text);
+          
+          // 如果当前节点是根节点，同步更新思维导图名称
+          if (nodeId === mindmap.rootId) {
+            get().updateMindmapName(rootNodes[0].text);
+          }
+          
           addNodesRecursive(nodeId, rootNodes[0].children);
         } else {
           // 如果有多个根节点，则全部作为子节点添加到当前节点下
@@ -666,11 +748,25 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         }
         
         setTimeout(() => applyLayout(), 100);
+
+        // 如果提供了 messageId，标记该消息为已应用
+        if (messageId) {
+          set((state) => ({
+            aiChatState: {
+              ...state.aiChatState,
+              messages: state.aiChatState.messages.map(m => 
+                m.id === messageId ? { ...m, isApplied: true } : m
+              )
+            }
+          }));
+        }
+
         toast.success('已应用 AI 生成的内容');
       }
     },
 
     resetAll: () => {
+      get().saveHistory();
       const emptyMindmap = createEmptyMindmap();
       // 保存清空后的状态到本地存储，防止刷新后恢复帮助文档
       localStorage.setItem('aimindflow_current_mindmap', JSON.stringify(emptyMindmap));
@@ -712,6 +808,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     },
 
     setMindmap: (mindmap) => {
+      get().saveHistory();
       set((state) => {
         const updatedMindmap = { ...mindmap, updatedAt: new Date() };
         persistMindmap(updatedMindmap);
@@ -731,6 +828,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       const { savedMindmaps } = get();
       const mindmap = savedMindmaps.find(m => m.id === id);
       if (mindmap) {
+        get().saveHistory();
         const updatedMindmap = { ...mindmap, updatedAt: new Date() };
         set({ 
           mindmap: updatedMindmap,
@@ -834,6 +932,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   setCurrentTool: (tool) => set({ currentTool: tool }),
   
   addNode: (parentId, text = '新节点', explicitSide) => {
+    get().saveHistory();
     const newId = generateId();
     const parent = get().mindmap.nodes[parentId];
     
@@ -932,6 +1031,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
   
   updateNodeText: (nodeId, text) => {
+      get().saveHistory();
       const oldText = get().mindmap.nodes[nodeId]?.text;
       set((state) => {
         const node = state.mindmap.nodes[nodeId];
@@ -968,6 +1068,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     },
   
   updateMindmapName: (name) => {
+    get().saveHistory();
     set((state) => {
       const rootId = state.mindmap.rootId;
       const rootNode = state.mindmap.nodes[rootId];
@@ -1002,6 +1103,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   createNewMindmap: () => {
+    get().saveHistory();
     const newMindmap = createEmptyMindmap();
     logActivity('create_mindmap', { id: newMindmap.id, name: newMindmap.name });
     set((state) => {
@@ -1026,6 +1128,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
   
   updateNodeStyle: (nodeId, style) => {
+    get().saveHistory();
     set((state) => {
       const updatedMindmap = {
         ...state.mindmap,
@@ -1050,6 +1153,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
   
   deleteNode: (nodeId) => {
+    get().saveHistory();
     // Use current nodes from state instead of stale get()
     set((state) => {
       const { mindmap } = state;
@@ -1115,6 +1219,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
   
   toggleCollapse: (nodeId) => {
+    get().saveHistory();
     set((state) => {
       const updatedMindmap = {
         ...state.mindmap,
@@ -1223,6 +1328,9 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
   
   startDrag: (id, position, type, handle) => {
+    if (type !== 'resize') {
+      get().saveHistory();
+    }
     let startPos: Position | null = null;
     let offset = { x: 0, y: 0 };
 
@@ -1513,6 +1621,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   organizeMindmap: (canvasWidth, canvasHeight) => {
+    get().saveHistory();
     // 1. Apply Layout (force all nodes to follow the layout algorithm)
     get().applyLayout(true);
 
@@ -1628,6 +1737,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
   
   setLayoutConfig: (config) => {
+    get().saveHistory();
     set((state) => {
       const newLayoutConfig = { ...state.layoutConfig, ...config };
       const updatedMindmap = { 
@@ -1853,6 +1963,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   applyColorPalette: (palette) => {
+    get().saveHistory();
     const { mindmap } = get();
     const updatedNodes = { ...mindmap.nodes };
 
@@ -1890,6 +2001,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   addElement: (element) => {
+    get().saveHistory();
     const id = generateId();
     set((state) => {
       const updatedMindmap = {
@@ -1910,6 +2022,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   updateElement: (id, element) => {
+    // 逻辑同 updateNodePosition，拖拽过程中的更新不保存历史
     set((state) => {
       const updatedElement = { ...state.mindmap.elements[id], ...element };
       const updatedMindmap = {
@@ -1929,6 +2042,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   deleteElement: (id) => {
+    get().saveHistory();
     set((state) => {
       const { [id]: _, ...rest } = state.mindmap.elements;
       const updatedMindmap = {
@@ -1945,6 +2059,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   addConnection: (connection) => {
+    get().saveHistory();
     const id = generateId();
     set((state) => {
       const updatedMindmap = {
@@ -1965,6 +2080,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   deleteConnection: (id) => {
+    get().saveHistory();
     set((state) => {
       // Handle default connection deletion (parent-child relationship)
       if (id.startsWith('node-conn-')) {
@@ -2034,6 +2150,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   updateNodePosition: (nodeId: string, position: Position) => {
+    // 只有当不是正在拖拽时才保存历史，拖拽结束时的保存由 endDrag 或相关逻辑处理
+    // 但在当前的 updateDrag 实现中，它是直接调用 updateNodePosition 的
+    // 为了避免拖拽过程中产生大量历史记录，我们不在 updateNodePosition 中保存历史
+    // 历史记录已在 startDrag 中保存了开始状态
     set((state) => {
       const node = state.mindmap.nodes[nodeId];
       if (!node) return state;
@@ -2135,6 +2255,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
       const data = await response.json();
       if (data.choices && data.choices[0].message.content) {
+        get().saveHistory();
         set({ aiProgressMessage: '正在构建节点结构...' });
         const content = data.choices[0].message.content;
         

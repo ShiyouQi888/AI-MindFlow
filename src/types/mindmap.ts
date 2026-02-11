@@ -129,6 +129,7 @@ export interface AIChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: number;
+  isApplied?: boolean;
 }
 
 export interface AIChatState {
@@ -289,16 +290,4 @@ export const COLOR_PALETTES: ColorPalette[] = [
 
 export function getNodeColor(level: number): string {
   return NODE_COLORS[level % NODE_COLORS.length];
-}
-
-export interface AIChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: number;
-}
-
-export interface AIChatState {
-  isOpen: boolean;
-  messages: AIChatMessage[];
 }

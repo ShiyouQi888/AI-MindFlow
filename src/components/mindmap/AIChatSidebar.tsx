@@ -200,9 +200,9 @@ const AIChatSidebar: React.FC = () => {
     return cleanText;
   };
 
-  const handleApplyContent = (content: string) => {
+  const handleApplyContent = (content: string, messageId: string) => {
     const selectedNodeId = selectionState.selectedNodeIds[0] || mindmap.rootId;
-    applyAIChatContent(selectedNodeId, content);
+    applyAIChatContent(selectedNodeId, content, messageId);
   };
 
   return (
@@ -314,12 +314,18 @@ const AIChatSidebar: React.FC = () => {
                         {msg.role === 'assistant' && hasStructuredContent(msg.content) && (
                           <Button
                             size="sm"
-                            variant="secondary"
-                            className="mt-4 w-full h-10 text-xs gap-2 bg-background border border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground transition-all shadow-md font-semibold rounded-xl"
-                            onClick={() => handleApplyContent(msg.content)}
+                            variant={msg.isApplied ? "ghost" : "secondary"}
+                            className={cn(
+                              "mt-4 w-full h-10 text-xs gap-2 transition-all shadow-md font-semibold rounded-xl border",
+                              msg.isApplied 
+                                ? "bg-muted text-muted-foreground border-transparent cursor-default" 
+                                : "bg-background border-primary/20 text-primary hover:bg-primary hover:text-primary-foreground"
+                            )}
+                            onClick={() => !msg.isApplied && handleApplyContent(msg.content, msg.id)}
+                            disabled={msg.isApplied}
                           >
                             <Wand2 className="w-4 h-4" />
-                            应用方案到思维导图
+                            {msg.isApplied ? "方案已应用" : "应用方案到思维导图"}
                           </Button>
                         )}
                       </div>
