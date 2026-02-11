@@ -25,7 +25,7 @@ import {
   Eye,
   Image as ImageIcon,
   Sparkles,
-  MessageSquareSparkles,
+  MessageSquareText,
   Eraser,
   AlertTriangle,
   LayoutGrid,
@@ -784,7 +784,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
       <Separator orientation="vertical" className="h-6 mx-1" />
 
       <ToolbarButton
-        icon={<MessageSquareSparkles className={cn("w-4 h-4", aiChatState.isOpen ? "text-primary fill-primary/20" : "text-primary")} />}
+        icon={<MessageSquareText className={cn("w-4 h-4", aiChatState.isOpen ? "text-primary fill-primary/20" : "text-primary")} />}
         tooltip="AI 助理"
         onClick={() => setAIChatOpen(!aiChatState.isOpen)}
       />
