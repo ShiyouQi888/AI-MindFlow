@@ -723,6 +723,48 @@ const MindmapCanvas: React.FC = () => {
       return;
     }
 
+    // 2.5 Check for "+" icon click to add child node
+    const checkPlusClick = () => {
+      const isRoot = (id: string) => nodes[id]?.parentId === null;
+      
+      for (const id of Object.keys(nodes)) {
+        const n = nodes[id];
+        const isSelected = selectionState.selectedNodeIds.includes(id);
+        const isHovered = selectionState.hoveredNodeId === id;
+        
+        if (isSelected || isHovered) {
+          const plusRadius = 12 / viewport.zoom;
+          const plusGap = 20 / viewport.zoom;
+          const plusY = n.position.y;
+          
+          // Check right side
+          if (isRoot(id) || n.side === 'right') {
+            const plusX = n.position.x + n.width / 2 + plusGap;
+            if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
+              const newId = addNode(id, undefined, 'right');
+              selectNode(newId);
+              setTimeout(() => setEditingNode(newId), 50);
+              return true;
+            }
+          }
+          
+          // Check left side
+          if (isRoot(id) || n.side === 'left') {
+            const plusX = n.position.x - n.width / 2 - plusGap;
+            if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
+              const newId = addNode(id, undefined, 'left');
+              selectNode(newId);
+              setTimeout(() => setEditingNode(newId), 50);
+              return true;
+            }
+          }
+        }
+      }
+      return false;
+    };
+
+    if (checkPlusClick()) return;
+
     // 3. If a node is clicked (single click selection/dragging)
     if (node) {
       // At low zoom, prioritize node selection over handles to make it feel more sensitive
@@ -836,7 +878,7 @@ const MindmapCanvas: React.FC = () => {
 
     clearSelection();
     startPan({ x: e.clientX, y: e.clientY });
-  }, [currentTool, addElement, getNodeAtPosition, getElementAtPosition, getResizeHandleAtPosition, selectNode, selectElement, selectConnection, clearSelection, startDrag, startPan, clientToCanvas, setEditingNode, setCurrentTool, colors, aiConfig.enabled, editingElementId, editingNodeId, elements, getConnectionHandleAtPosition, getHoveredConnection, inputDialog.isOpen, nodes, selectionState.selectedNodeIds, setEditingElement, viewport.zoom, focusNode, organizeMindmap]);
+  }, [currentTool, addElement, getNodeAtPosition, getElementAtPosition, getResizeHandleAtPosition, selectNode, selectElement, selectConnection, clearSelection, startDrag, startPan, clientToCanvas, setEditingNode, setCurrentTool, colors, aiConfig.enabled, editingElementId, editingNodeId, elements, getConnectionHandleAtPosition, getHoveredConnection, inputDialog.isOpen, nodes, selectionState.selectedNodeIds, selectionState.hoveredNodeId, setEditingElement, viewport.zoom, focusNode, organizeMindmap, addNode]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     const pos = clientToCanvas(e.clientX, e.clientY);
@@ -913,21 +955,60 @@ const MindmapCanvas: React.FC = () => {
           else if (handle === 'w' || handle === 'e') canvas.style.cursor = 'ew-resize';
         } else if (isOverAIHandle) {
           canvas.style.cursor = 'pointer';
-        } else if (elId) {
-          canvas.style.cursor = 'move';
-        } else if (connId) {
-          canvas.style.cursor = 'pointer';
         } else {
-          // Reset based on tool
-          switch (currentTool) {
-            case 'select': canvas.style.cursor = 'default'; break;
-            case 'text': canvas.style.cursor = 'text'; break;
-            default: canvas.style.cursor = 'crosshair';
+          // Check for "+" icon hover
+          let isOverPlusHandle = false;
+          const plusRadius = 12 / viewport.zoom;
+          const plusGap = 20 / viewport.zoom;
+
+          // Only check for selected or hovered node
+          const nodesToCheck = new Set<string>();
+          selectionState.selectedNodeIds.forEach(id => nodesToCheck.add(id));
+          if (selectionState.hoveredNodeId) nodesToCheck.add(selectionState.hoveredNodeId);
+
+          for (const id of nodesToCheck) {
+            const n = nodes[id];
+            if (!n) continue;
+            const isRoot = n.parentId === null;
+            const plusY = n.position.y;
+            
+            // Check right side
+            if (isRoot || n.side === 'right') {
+              const plusX = n.position.x + n.width / 2 + plusGap;
+              if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
+                isOverPlusHandle = true;
+                break;
+              }
+            }
+            
+            // Check left side
+            if (isRoot || n.side === 'left') {
+              const plusX = n.position.x - n.width / 2 - plusGap;
+              if (Math.hypot(pos.x - plusX, pos.y - plusY) < plusRadius) {
+                isOverPlusHandle = true;
+                break;
+              }
+            }
+          }
+
+          if (isOverPlusHandle) {
+            canvas.style.cursor = 'pointer';
+          } else if (elId) {
+            canvas.style.cursor = 'move';
+          } else if (connId) {
+            canvas.style.cursor = 'pointer';
+          } else {
+            // Reset based on tool
+            switch (currentTool) {
+              case 'select': canvas.style.cursor = 'default'; break;
+              case 'text': canvas.style.cursor = 'text'; break;
+              default: canvas.style.cursor = 'crosshair';
+            }
           }
         }
       }
     }
-  }, [drawingId, startPos, elements, clientToCanvas, updateElement, dragState.isDragging, updateDrag, canvasState.isPanning, updatePan, getNodeAtPosition, setHoveredNode, getElementAtPosition, setHoveredElement, getHoveredConnection, setHoveredConnection, getResizeHandleAtPosition, currentTool, aiConfig.enabled, viewport.zoom, selectionState.selectedNodeIds, nodes]);
+  }, [drawingId, startPos, elements, clientToCanvas, updateElement, dragState.isDragging, updateDrag, canvasState.isPanning, updatePan, getNodeAtPosition, setHoveredNode, getElementAtPosition, setHoveredElement, getHoveredConnection, setHoveredConnection, getResizeHandleAtPosition, currentTool, aiConfig.enabled, viewport.zoom, selectionState.selectedNodeIds, selectionState.hoveredNodeId, nodes]);
 
   const handleMouseUp = useCallback((e: React.MouseEvent) => {
     if (drawingId) {
@@ -1598,6 +1679,45 @@ const MindmapCanvas: React.FC = () => {
         ctx.fillText(node.collapsed ? '+' : '−', indicatorX, indicatorY);
       }
       
+      // Draw child indicator (+) when hovered or selected
+      if (isHovered || isSelected) {
+        const plusRadius = 8 / viewport.zoom;
+        const plusGap = 20 / viewport.zoom;
+        
+        // Helper to draw plus button
+        const drawPlusButton = (px: number, py: number) => {
+          ctx.beginPath();
+          ctx.arc(px, py, plusRadius, 0, Math.PI * 2);
+          ctx.fillStyle = '#ef4444'; // Red-500
+          ctx.fill();
+
+          // Draw plus sign
+          ctx.beginPath();
+          const lineLen = 4 / viewport.zoom;
+          ctx.moveTo(px - lineLen, py);
+          ctx.lineTo(px + lineLen, py);
+          ctx.moveTo(px, py - lineLen);
+          ctx.lineTo(px, py + lineLen);
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2 / viewport.zoom;
+          ctx.stroke();
+        };
+
+        // Draw on right side if it's root or right-side node
+        if (isRoot || node.side === 'right') {
+          const plusX = x + node.width + plusGap;
+          const plusY = node.position.y;
+          drawPlusButton(plusX, plusY);
+        }
+
+        // Draw on left side if it's root or left-side node
+        if (isRoot || node.side === 'left') {
+          const plusX = x - plusGap;
+          const plusY = node.position.y;
+          drawPlusButton(plusX, plusY);
+        }
+      }
+
       // Draw children
       if (!node.collapsed) {
         for (const childId of node.children) {

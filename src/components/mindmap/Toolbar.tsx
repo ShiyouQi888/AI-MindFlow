@@ -25,8 +25,10 @@ import {
   Eye,
   Image as ImageIcon,
   Sparkles,
+  MessageSquareSparkles,
   Eraser,
   AlertTriangle,
+  LayoutGrid,
 } from 'lucide-react';
 import { useMindmapStore } from '@/stores/mindmapStore';
 import { getNodeColor } from '@/types/mindmap';
@@ -774,7 +776,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
       <Separator orientation="vertical" className="h-6 mx-1" />
       
       <ToolbarButton
-        icon={<Wand2 className="w-4 h-4" />}
+        icon={<LayoutGrid className="w-4 h-4" />}
         tooltip="一键整理"
         onClick={organizeMindmap}
       />
@@ -782,7 +784,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
       <Separator orientation="vertical" className="h-6 mx-1" />
 
       <ToolbarButton
-        icon={<Sparkles className={cn("w-4 h-4", aiChatState.isOpen ? "text-primary fill-primary/20" : "text-primary")} />}
+        icon={<MessageSquareSparkles className={cn("w-4 h-4", aiChatState.isOpen ? "text-primary fill-primary/20" : "text-primary")} />}
         tooltip="AI 助理"
         onClick={() => setAIChatOpen(!aiChatState.isOpen)}
       />

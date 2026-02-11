@@ -1513,8 +1513,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
   },
 
   organizeMindmap: (canvasWidth, canvasHeight) => {
-    // 1. Apply Layout
-    get().applyLayout();
+    // 1. Apply Layout (force all nodes to follow the layout algorithm)
+    get().applyLayout(true);
 
     // 2. Calculate bounding box of all content
     const { mindmap, canvasSize } = get();
@@ -1644,7 +1644,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     });
   },
   
-  applyLayout: () => {
+  applyLayout: (forceAll = false) => {
     const { mindmap, layoutConfig } = get();
     const { nodes, rootId } = mindmap;
     const root = nodes[rootId];
@@ -1653,6 +1653,13 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     
     const newPositions: Record<string, Position> = {};
     const updatedNodes = { ...nodes };
+
+    // Reset isCustomPosition if forced
+    if (forceAll) {
+      Object.keys(updatedNodes).forEach(id => {
+        updatedNodes[id] = { ...updatedNodes[id], isCustomPosition: false };
+      });
+    }
 
     // Helper to calculate total height of a subtree
     const getSubtreeHeight = (nodeId: string): number => {
@@ -1687,7 +1694,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       if (node.isCustomPosition) {
         newPositions[nodeId] = node.position;
       } else {
-        newPositions[nodeId] = { x, y: y + subtreeHeight / 2 - node.height / 2 };
+        // Unify coordinate system: node.position.y is the center of the node
+        newPositions[nodeId] = { x, y: y + subtreeHeight / 2 };
       }
       
       if (node.collapsed || !node.children || node.children.length === 0) {
@@ -1729,10 +1737,9 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
         if (firstChildPos && lastChildPos) {
           const firstChildY = firstChildPos.y;
           const lastChildY = lastChildPos.y;
-          const lastChildNodeHeight = updatedNodes[lastChildId]?.height || 0;
           
-          const childrenCenterY = (firstChildY + (lastChildY + lastChildNodeHeight)) / 2;
-          newPositions[nodeId] = { x, y: childrenCenterY - node.height / 2 };
+          const childrenCenterY = (firstChildY + lastChildY) / 2;
+          newPositions[nodeId] = { x, y: childrenCenterY };
         }
       }
       
@@ -1745,10 +1752,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     
     // Always use the existing root position if it's already there
     // This helps preserve the mindmap's overall position on the canvas
-    if (root.position) {
+    if (root.position && !forceAll) {
       newPositions[rootId] = root.position;
     } else {
-      newPositions[rootId] = { x: centerX, y: centerY - root.height / 2 };
+      newPositions[rootId] = { x: centerX, y: centerY };
     }
 
     const rootPos = newPositions[rootId];
@@ -1769,8 +1776,8 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
       const leftTotalHeight = calculateTotalHeight(leftChildren);
       const rightTotalHeight = calculateTotalHeight(rightChildren);
 
-      let leftY = rootPos.y + root.height / 2 - leftTotalHeight / 2;
-      let rightY = rootPos.y + root.height / 2 - rightTotalHeight / 2;
+      let leftY = rootPos.y - leftTotalHeight / 2;
+      let rightY = rootPos.y - rightTotalHeight / 2;
 
       leftChildren.forEach(id => {
         const childNode = updatedNodes[id];
@@ -1794,7 +1801,7 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
           }, 0) + (validChildren.length - 1) * layoutConfig.verticalSpacing
         : 0;
       
-      let currentY = rootPos.y + root.height / 2 - totalHeight / 2;
+      let currentY = rootPos.y - totalHeight / 2;
       validChildren.forEach(id => {
         const childNode = updatedNodes[id];
         if (!childNode) return;
@@ -1814,13 +1821,13 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
     if (root.children.length > 0 && !root.isCustomPosition) {
       const childrenWithPos = root.children
         .filter(id => updatedNodes[id])
-        .map(id => ({ id, pos: newPositions[id], height: updatedNodes[id]?.height || 0 }))
+        .map(id => ({ id, pos: newPositions[id] }))
         .filter(item => item.pos);
         
       if (childrenWithPos.length > 0) {
         const minY = Math.min(...childrenWithPos.map(item => item.pos!.y));
-        const maxYWithHeight = Math.max(...childrenWithPos.map(item => item.pos!.y + item.height));
-        newPositions[rootId] = { x: rootPos.x, y: (minY + maxYWithHeight) / 2 - root.height / 2 };
+        const maxY = Math.max(...childrenWithPos.map(item => item.pos!.y));
+        newPositions[rootId] = { x: rootPos.x, y: (minY + maxY) / 2 };
       }
     }
     
