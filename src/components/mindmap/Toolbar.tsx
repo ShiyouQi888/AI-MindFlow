@@ -851,7 +851,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ onOpenGlobalAI, onClearScreen }) => {
 
       <ToolbarButton
         icon={<Maximize className="w-4 h-4" />}
-        tooltip="预览模式 (F11 / Esc 退出)"
+        tooltip="预览模式 (F8 / Esc 退出)"
         onClick={() => setPreviewMode(true)}
       />
 

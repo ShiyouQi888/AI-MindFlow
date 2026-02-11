@@ -80,8 +80,8 @@ const Index: React.FC = () => {
       if (e.key === 'Escape' && isPreviewMode && !isInput) {
         setPreviewMode(false);
       }
-      // F11 to toggle preview mode instead of browser default if possible
-      if (e.key === 'F11') {
+      // F8 to toggle preview mode (avoid F11 as it's browser fullscreen default)
+      if (e.key === 'F8') {
         if (e.cancelable) {
           e.preventDefault();
         }
