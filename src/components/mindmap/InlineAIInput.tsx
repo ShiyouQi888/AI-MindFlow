@@ -54,7 +54,7 @@ const InlineAIInput: React.FC<InlineAIInputProps> = ({
         transform: 'translateX(-50%)',
       }}
     >
-      <div className="flex items-center gap-2 p-1.5 bg-background/40 backdrop-blur-lg border border-primary/20 rounded-full shadow-[0_8px_32px_rgba(139,92,246,0.15)] min-w-[340px] group hover:border-primary/40 transition-all duration-300">
+      <div className="flex items-center gap-2 p-1.5 bg-background/40 backdrop-blur-lg border border-primary/20 rounded-xl shadow-[0_8px_32px_rgba(139,92,246,0.15)] min-w-[420px] group hover:border-primary/40 transition-all duration-300">
         <div className="pl-3.5 text-primary/60 group-hover:text-primary transition-colors">
           <Sparkles className="w-4 h-4" />
         </div>
@@ -64,7 +64,7 @@ const InlineAIInput: React.FC<InlineAIInputProps> = ({
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="输入指令以扩展思路..."
-          className="h-8 border-none bg-transparent focus-visible:ring-0 text-sm placeholder:text-muted-foreground/40"
+          className="h-9 border-none bg-transparent focus-visible:ring-0 text-sm placeholder:text-muted-foreground/40"
           disabled={isProcessing}
         />
         <div className="flex items-center gap-1.5 pr-1">
@@ -72,14 +72,14 @@ const InlineAIInput: React.FC<InlineAIInputProps> = ({
             size="sm"
             onClick={handleSubmit}
             disabled={isProcessing}
-            className="h-8 px-4 rounded-full bg-primary/70 hover:bg-primary text-white text-xs font-medium gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50"
+            className="h-8 px-3 rounded-lg bg-primary/70 hover:bg-primary text-white text-[11px] font-medium gap-1.5 shadow-lg transition-all active:scale-95 disabled:opacity-50"
           >
             {isProcessing ? (
               <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             ) : (
               <>
                 <span className="whitespace-nowrap">开始生成</span>
-                <Send className="w-3 h-3" />
+                <Send className="w-2.5 h-2.5" />
               </>
             )}
           </Button>
@@ -87,7 +87,7 @@ const InlineAIInput: React.FC<InlineAIInputProps> = ({
             size="icon"
             variant="ghost"
             onClick={onCancel}
-            className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive text-muted-foreground/60 transition-colors"
+            className="h-8 w-8 rounded-lg hover:bg-destructive/10 hover:text-destructive text-muted-foreground/60 transition-colors"
           >
             <X className="w-4 h-4" />
           </Button>
