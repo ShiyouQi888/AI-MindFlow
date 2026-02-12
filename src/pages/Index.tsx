@@ -60,7 +60,7 @@ const Index: React.FC = () => {
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [aiChatState.isOpen, organizeMindmap, isPreviewMode, canvasSize.width, canvasSize.height]);
+  }, [aiChatState.isOpen, aiChatState.width, organizeMindmap, isPreviewMode, canvasSize.width, canvasSize.height]);
   const { initialize: initializeAuth } = useAuthStore();
   const [isNewDialogOpen, setIsNewDialogOpen] = React.useState(false);
   const [mindmapToDelete, setMindmapToDelete] = React.useState<string | null>(null);

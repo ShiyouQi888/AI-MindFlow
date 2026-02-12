@@ -133,6 +133,7 @@ interface MindmapStore {
   // AI Chat
   aiChatState: AIChatState;
   setAIChatOpen: (isOpen: boolean) => void;
+  setAIChatWidth: (width: number) => void;
   addChatMessage: (message: Omit<AIChatMessage, 'id' | 'timestamp'> & { id?: string }) => void;
   clearChatHistory: () => void;
   updateChatMessage: (id: string, content: string) => void;
@@ -648,6 +649,10 @@ export const useMindmapStore = create<MindmapStore>((set, get) => {
 
     setAIChatOpen: (isOpen) => set((state) => ({ 
       aiChatState: { ...state.aiChatState, isOpen } 
+    })),
+
+    setAIChatWidth: (width) => set((state) => ({
+      aiChatState: { ...state.aiChatState, width }
     })),
 
     addChatMessage: (message) => set((state) => ({

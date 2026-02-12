@@ -24,6 +24,7 @@ const AIChatSidebar: React.FC = () => {
   const { 
     aiChatState, 
     setAIChatOpen, 
+    setAIChatWidth,
     addChatMessage, 
     clearChatHistory, 
     updateChatMessage,
@@ -39,11 +40,48 @@ const AIChatSidebar: React.FC = () => {
   
   const [input, setInput] = useState('');
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
   const [isClearDialogOpen, setIsClearDialogOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
-  const { isOpen, messages } = aiChatState;
+  const { isOpen, messages, width = 420 } = aiChatState;
+
+  // Handle resizing
+  const startResizing = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth > 300 && newWidth < 800) {
+        setAIChatWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+    } else {
+      document.body.style.cursor = 'default';
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'default';
+    };
+  }, [isResizing, setAIChatWidth]);
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -363,11 +401,25 @@ const AIChatSidebar: React.FC = () => {
 
   return (
     <div 
+      ref={sidebarRef}
       className={cn(
-        "h-full bg-background border-l border-border transition-all duration-300 ease-in-out z-[40] flex flex-col",
-        isCollapsed ? "w-12" : "w-[420px]"
+        "h-full bg-background border-l border-border z-[40] flex flex-col relative",
+        !isResizing && "transition-all duration-300 ease-in-out"
       )}
+      style={{ width: isCollapsed ? '48px' : `${width}px` }}
     >
+      {/* Resize Handle */}
+      {!isCollapsed && (
+        <div
+          className={cn(
+            "absolute left-0 top-0 w-1.5 h-full cursor-col-resize z-[50] group",
+            isResizing ? "bg-primary/30" : "hover:bg-primary/20"
+          )}
+          onMouseDown={startResizing}
+        >
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-8 rounded-full bg-border group-hover:bg-primary/40 transition-colors" />
+        </div>
+      )}
       <div className={cn(
         "flex-1 flex flex-col transition-all duration-300 min-h-0",
         isCollapsed ? "p-1" : "p-3 bg-secondary/30 backdrop-blur-xl"

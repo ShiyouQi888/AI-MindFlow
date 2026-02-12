@@ -135,6 +135,7 @@ export interface AIChatMessage {
 export interface AIChatState {
   isOpen: boolean;
   messages: AIChatMessage[];
+  width?: number;
 }
 
 export interface MindMap {
