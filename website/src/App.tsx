@@ -19,7 +19,13 @@ import {
   Image,
   PlayCircle,
   Box,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Video,
+  Layers,
+  FileCode,
+  MousePointer,
+  History,
+  Keyboard
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -43,7 +49,38 @@ const App: React.FC = () => {
     {
       q: "支持 macOS 或 Linux 吗？",
       a: "目前首发版本支持 Windows。macOS 和移动端版本已在开发计划中，敬请期待。"
+    },
+    {
+      q: "为什么嵌入的视频无法播放？",
+      a: "请确保链接有效。如果是本地视频，请确认格式（推荐 .mp4）。某些平台（如 Bilibili）可能因版权限制禁止外部嵌入，建议使用标准的 iframe 嵌入链接。"
+    },
+    {
+      q: "如何迁移我的思维导图项目？",
+      a: "您可以将项目导出为专有的 .amf 加密格式文件，在另一台设备的 AI-MindFlow 中通过“导入”功能即可完整还原所有节点与布局。"
     }
+  ];
+
+  const changelogs = [
+    {
+      version: "v1.1.0",
+      date: "2026-02-05",
+      changes: [
+        "重构视频播放器，支持完整控制组件与全屏模式",
+        "新增透明背景 PNG 与高清 JPG 导出选项",
+        "支持专属加密格式 .amf 导出与导入",
+        "优化低缩放倍率下的节点聚焦与交互逻辑",
+        "改进 AI 生成状态的视觉反馈提示"
+      ]
+    }
+  ];
+
+  const shortcuts = [
+    { key: "Tab", desc: "添加子节点" },
+    { key: "Enter", desc: "添加同级节点" },
+    { key: "F2 / 双击", desc: "编辑节点内容" },
+    { key: "Delete", desc: "删除选中节点/连线" },
+    { key: "Space", desc: "展开或折叠分支" },
+    { key: "Ctrl + S", desc: "快速保存项目" }
   ];
 
   const TermsPage = () => (
@@ -227,32 +264,32 @@ const App: React.FC = () => {
               {
                 icon: <Zap className="w-6 h-6" />,
                 title: "AI 一键生成",
-                desc: "只需输入主题或一句话，AI 即可为你自动规划完整的思维导图结构。"
+                desc: "只需输入主题，AI 即可自动规划逻辑严密的思维导图，支持 SWOT、5W2H 等专业分析模式。"
               },
               {
-                icon: <MessageSquare className="w-6 h-6" />,
-                title: "智能对话辅助",
-                desc: "集成侧边栏 AI 助理，随时解答你的疑问，提供创意方案和补充内容。"
+                icon: <Video className="w-6 h-6" />,
+                title: "多媒体混合画布",
+                desc: "不仅是文字，还支持直接嵌入本地视频、图片及网页链接，打造沉浸式知识墙。"
               },
               {
-                icon: <Layout className="w-6 h-6" />,
-                title: "自由灵活布局",
-                desc: "支持多种布局算法，节点自由拖拽，随心所欲定制你的知识图谱。"
+                icon: <Layers className="w-6 h-6" />,
+                title: "磁吸连线系统",
+                desc: "节点间支持磁吸自动连线，移动时线条丝滑追踪，支持曲线、折线等多种风格。"
               },
               {
-                icon: <ShieldCheck className="w-6 h-6" />,
-                title: "本地存储安全",
-                desc: "你的数据优先存储在本地，并支持多端同步，隐私与效率并存。"
+                icon: <FileCode className="w-6 h-6" />,
+                title: "专属加密存储",
+                desc: "采用专有 .amf 二进制加密格式，确保您的个人创意与本地数据隐私万无一失。"
               },
               {
-                icon: <Globe className="w-6 h-6" />,
-                title: "极致交互体验",
-                desc: "流畅的缩放、平移和精美的动效，让整理思绪成为一种视觉享受。"
+                icon: <MousePointer className="w-6 h-6" />,
+                title: "智能交互聚焦",
+                desc: "优化大比例缩放下的点击精度，支持自动聚焦核心节点，让复杂导图操作依然流畅。"
               },
               {
                 icon: <Sparkles className="w-6 h-6" />,
-                title: "持续进化",
-                desc: "不断接入最新的 AI 模型能力，持续优化交互体验，永不停止进化。"
+                title: "AI 对话辅助",
+                desc: "内置 AI 助理，实时反馈“正在思索中”状态，支持自定义 Prompt 深度扩充思路。"
               }
             ].map((feature, idx) => (
               <motion.div 
@@ -381,6 +418,65 @@ const App: React.FC = () => {
                 </motion.div>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Shortcuts & Changelog Section */}
+      <section className="py-24 bg-slate-50 border-t border-slate-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-2 gap-16">
+            {/* Shortcuts */}
+            <div>
+              <div className="flex items-center gap-3 mb-8">
+                <div className="p-2 bg-violet-100 text-violet-600 rounded-xl">
+                  <Keyboard className="w-6 h-6" />
+                </div>
+                <h3 className="text-2xl font-bold">高效快捷键</h3>
+              </div>
+              <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                <div className="divide-y divide-slate-100">
+                  {shortcuts.map((s, i) => (
+                    <div key={i} className="px-8 py-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                      <span className="text-slate-600 font-medium">{s.desc}</span>
+                      <kbd className="px-3 py-1 bg-slate-100 border border-slate-200 rounded-lg text-xs font-bold text-slate-500 shadow-sm">
+                        {s.key}
+                      </kbd>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Changelog */}
+            <div>
+              <div className="flex items-center gap-3 mb-8">
+                <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
+                  <History className="w-6 h-6" />
+                </div>
+                <h3 className="text-2xl font-bold">更新日志</h3>
+              </div>
+              <div className="space-y-6">
+                {changelogs.map((log, i) => (
+                  <div key={i} className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-4">
+                      <span className="text-xs font-bold text-slate-300 group-hover:text-indigo-200 transition-colors uppercase tracking-widest">{log.date}</span>
+                    </div>
+                    <div className="inline-flex px-3 py-1 rounded-full bg-indigo-50 text-indigo-600 text-xs font-bold mb-4">
+                      {log.version}
+                    </div>
+                    <ul className="space-y-3">
+                      {log.changes.map((change, ci) => (
+                        <li key={ci} className="flex gap-3 text-sm text-slate-500 leading-relaxed">
+                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-2 flex-shrink-0" />
+                          {change}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>
